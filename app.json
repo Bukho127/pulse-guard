@@ -9,6 +9,10 @@
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "Pulse Guard uses your location to detect and report your current position during safety events.",
+        "BuildIdentifier": "dev.expo.pulseguard"
+      },
       "supportsTablet": true
     },
     "android": {
@@ -19,7 +23,14 @@
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "dev.expo.pulseguard",
+      "googleServicesFile": "./google-services.json",
+      "permissions": [
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION"
+      ]
+
     },
     "web": {
       "output": "static",
@@ -27,6 +38,13 @@
     },
     "plugins": [
       "expo-router",
+      "expo-notifications",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Pulse Guard uses your location to detect and report your current position during safety events."
+        }
+      ],
       [
         "expo-splash-screen",
         {
@@ -44,6 +62,13 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "00cecbc1-d34d-479c-9537-bcb658774674"
+      }
+    },
+    "owner": "bukho127"
   }
 }

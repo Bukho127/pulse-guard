@@ -4,6 +4,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { HeroShield } from '@/components/hero-shield';
 import { ThemedText } from '@/components/themed-text';
 
+
 export default function HomeScreen() {
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -11,6 +12,9 @@ export default function HomeScreen() {
 
       <View style={styles.container}>
         <HeroShield />
+        <ThemedText style={{ fontSize: 18, lineHeight: 24, textAlign: 'center', color: '#0d0d0d', fontFamily: 'Geist_500Medium' }}>
+          Your safety companion, anytime, anywhere.
+        </ThemedText>
 
         <View style={styles.footer}>
           <Pressable
