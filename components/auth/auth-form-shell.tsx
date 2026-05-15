@@ -1,7 +1,7 @@
-import { AntDesign, FontAwesome, Ionicons } from "@expo/vector-icons";
+import { Ionicons } from "@expo/vector-icons";
 import { Link, router } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
-import { useEffect, type ReactNode } from "react";
+import { type ReactNode } from "react";
 import GoogleLogo from '@/assets/logos/google_logo.svg';
 import FacebookLogo from '@/assets/logos/logos_facebook.svg';
 import AppleLogo from '@/assets/logos/apple_logo.svg';
@@ -25,6 +25,7 @@ type AuthFormShellProps = {
   actionLinkLabel: string;
   socialLabel: string;
   fields: ReactNode;
+  onSubmit?: () => void;
 };
 
 type AuthFieldProps = {
@@ -52,6 +53,7 @@ export function AuthFormShell({
   actionLinkLabel,
   socialLabel,
   fields,
+  onSubmit,
 }: AuthFormShellProps) {
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -81,7 +83,13 @@ export function AuthFormShell({
 
           <View style={styles.fields}>{fields}</View>
 
-          <Pressable accessibilityRole="button" style={styles.primaryButton}>
+          <Pressable
+            accessibilityRole="button"
+            onPress={onSubmit}
+            style={({ pressed }) => [
+              styles.primaryButton,
+              pressed && styles.primaryButtonPressed,
+            ]}>
             <LinearGradient
               colors={["rgba(141, 141, 141, 0.25)", "rgba(255, 255, 255, 0)"]}
               start={{ x: 0.5, y: 0 }}
@@ -192,14 +200,12 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 24,
     lineHeight: 30,
-    fontWeight: "700",
     color: "#000000",
-    fontFamily: "Geist_400Regular",
+    fontFamily: "Geist_500Medium",
   },
   subtitle: {
     fontSize: 15,
     lineHeight: 18,
-    fontWeight: "400",
     color: "#8A8A8A",
     fontFamily: "Geist_400Regular",
   },
@@ -218,14 +224,14 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 14,
     lineHeight: 22,
-    fontWeight: "600",
     color: "#484848",
+    fontFamily: "Geist_500Medium",
   },
   rightText: {
     fontSize: 14,
     lineHeight: 22,
-    fontWeight: "300",
     color: "#777777",
+    fontFamily: "Geist_400Regular",
   },
   input: {
     height: 52,
@@ -236,6 +242,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: "#1F1F1F",
     backgroundColor: "#FFFFFF",
+    fontFamily: "Geist_400Regular",
   },
   primaryButton: {
     marginTop: 34,
@@ -244,6 +251,10 @@ const styles = StyleSheet.create({
     backgroundColor: "#262626",
     alignItems: "center",
     justifyContent: "center",
+  },
+  primaryButtonPressed: {
+    opacity: 0.9,
+    transform: [{ scale: 0.99 }],
   },
   innerHighlight: {
     position: 'absolute',
@@ -258,8 +269,7 @@ const styles = StyleSheet.create({
     fontSize: 15,
     lineHeight: 22,
     color: "#FFFFFF",
-    fontWeight: "500",
-    fontFamily: "Geist_400Regular",
+    fontFamily: "Geist_500Medium",
   },
   socialSection: {
     marginTop: 36,
@@ -280,7 +290,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     lineHeight: 20,
     color: "#8D8D8D",
-    fontWeight: "600",
+    fontFamily: "Geist_500Medium",
   },
   socialIcons: {
     flexDirection: "row",
@@ -303,14 +313,13 @@ const styles = StyleSheet.create({
     fontSize: 15,
     lineHeight: 18,
     color: "#9D9D9D",
-    fontWeight: "400",
     fontFamily: "Geist_400Regular",
   },
   footerLink: {
     fontSize: 15,
     lineHeight: 18,
     color: "#63B95B",
-    fontWeight: "600",
+    fontFamily: "Geist_500Medium",
     textDecorationLine: "underline",
   },
 });

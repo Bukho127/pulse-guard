@@ -1,20 +1,31 @@
-import { Link, router, Tabs } from 'expo-router';
-import { Pressable, SafeAreaView, StyleSheet, View } from 'react-native';
+import { Link, router } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
-import { HeroShield } from '@/components/hero-shield';
+import { Pressable, SafeAreaView, StyleSheet, View } from 'react-native';
+
+import PulseGuardLogo from '@/assets/logos/pulse-guard-logo.svg';
 import { ThemedText } from '@/components/themed-text';
 
-
-export default function HomeScreen() {
+export default function OnboardingScreen() {
   return (
     <SafeAreaView style={styles.safeArea}>
-      <Tabs.Screen options={{ title: 'Home', tabBarStyle: { display: 'none' } }} />
-
       <View style={styles.container}>
-        <HeroShield />
-        <ThemedText style={{ fontSize: 18, lineHeight: 24, textAlign: 'center', color: '#0d0d0d', fontFamily: 'Geist_500Medium' }}>
-          Your safety companion, anytime, anywhere.
-        </ThemedText>
+        <View style={styles.hero}>
+          <PulseGuardLogo
+            width={214}
+            height={214}
+            style={styles.logo}
+            accessibilityLabel="Pulse Guard logo"
+          />
+
+          <View style={styles.messageGroup}>
+            <ThemedText style={styles.title}>REPORT CRIME</ThemedText>
+            <ThemedText style={styles.title}>ANONYMOUSLY</ThemedText>
+          </View>
+
+          <ThemedText style={styles.bodyCopy}>
+            All videos are encrypted end-to-end and stored securely. Your identity is protected.
+          </ThemedText>
+        </View>
 
         <View style={styles.footer}>
           <Pressable
@@ -24,7 +35,7 @@ export default function HomeScreen() {
               styles.continueButton,
               pressed && styles.continueButtonPressed,
             ]}>
-              <LinearGradient
+            <LinearGradient
               colors={['rgba(141, 141, 141, 0.25)', 'rgba(255, 255, 255, 0)']}
               start={{ x: 0.5, y: 0 }}
               end={{ x: 0.5, y: 1 }}
@@ -58,21 +69,47 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     justifyContent: 'space-between',
-    paddingHorizontal: 32,
-    paddingTop: 24,
-    paddingBottom: 28,
+    paddingHorizontal: 38,
+    paddingTop: 134,
+    paddingBottom: 52,
     backgroundColor: '#FFFFFF',
+  },
+  hero: {
+    alignItems: 'center',
+  },
+  logo: {
+    marginBottom: 72,
+  },
+  messageGroup: {
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  title: {
+    color: '#111111',
+    fontSize: 23,
+    lineHeight: 25,
+    textAlign: 'center',
+    fontFamily: 'Geist_500Medium',
+    letterSpacing: 0,
+  },
+  bodyCopy: {
+    maxWidth: 304,
+    color: '#77777B',
+    fontSize: 16,
+    lineHeight: 21,
+    textAlign: 'center',
+    fontFamily: 'Geist_400Regular',
   },
   footer: {
     alignItems: 'center',
-    gap: 20,
-    paddingBottom: 8,
+    gap: 22,
   },
   continueButton: {
     width: '100%',
-    height: 45,
-    borderRadius: 12,
-    backgroundColor: '#1D1D1D',
+    maxWidth: 318,
+    height: 40,
+    borderRadius: 11,
+    backgroundColor: '#202020',
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
@@ -101,21 +138,23 @@ const styles = StyleSheet.create({
   },
   continueText: {
     color: '#FFFFFF',
-    fontSize: 15,
-    lineHeight: 20,
+    fontSize: 16,
+    lineHeight: 21,
     fontFamily: 'Geist_400Regular',
   },
   disclaimer: {
-    maxWidth: 300,
+    maxWidth: 312,
     textAlign: 'center',
-    color: '#3c3c3c',
-    fontSize: 13,
-    lineHeight: 19,
+    color: '#8D8D92',
+    fontSize: 12,
+    lineHeight: 17,
+    fontFamily: 'Geist_400Regular',
   },
   inlineLink: {
-    color: '#2b2b2b',
-    fontSize: 13,
-    lineHeight: 19,
+    color: '#8D8D92',
+    fontSize: 12,
+    lineHeight: 17,
+    fontFamily: 'Geist_400Regular',
     textDecorationLine: 'underline',
   },
 });

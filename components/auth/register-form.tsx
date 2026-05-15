@@ -1,3 +1,5 @@
+import { router } from 'expo-router';
+
 import { AuthField, AuthFormShell } from '@/components/auth/auth-form-shell';
 
 export function RegisterForm() {
@@ -10,6 +12,7 @@ export function RegisterForm() {
       actionLinkHref="/sign-in"
       actionLinkLabel="Sign in"
       socialLabel="Register with"
+      onSubmit={() => router.replace('/(tabs)/home')}
       fields={
         <>
           <AuthField
