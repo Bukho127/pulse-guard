@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import * as Location from 'expo-location';
+import { useRouter } from 'expo-router';
 
 import LocationIcon from '@/assets/icons/location-icon.svg';
 import NotificationIcon from '@/assets/icons/notification-icon.svg';
@@ -27,6 +28,7 @@ function formatLocation(places: Location.LocationGeocodedAddress[]) {
 }
 
 export function HomeHeader() {
+  const router = useRouter();
   const { notification } = useNotification();
   const [locationLabel, setLocationLabel] = useState(FALLBACK_LOCATION);
 
@@ -80,6 +82,9 @@ export function HomeHeader() {
       <Pressable
         accessibilityLabel="Notifications"
         accessibilityRole="button"
+        onPress={() => {
+          router.push('/(tabs)/notifications');
+        }}
         style={({ pressed }) => [styles.notificationButton, pressed && styles.pressed]}>
         <NotificationIcon width={24} height={24} />
         {notification ? <View style={styles.notificationDot} /> : null}

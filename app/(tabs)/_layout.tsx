@@ -31,6 +31,13 @@ export default function TabLayout() {
           title: 'Heatmaps',
         }}
       />
+      <Tabs.Screen
+        name="notifications"
+        options={{
+          href: null,
+          title: 'Notifications',
+        }}
+      />
     </Tabs>
   );
 }

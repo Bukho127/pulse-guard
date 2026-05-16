@@ -1,11 +1,14 @@
 import { SafeAreaView, StyleSheet } from 'react-native';
 
-import { HeatmapMap } from '@/components/maps/heatmap-map';
+import { DUMMY_HEATMAP_INCIDENTS, getVisibleHeatmapIncidents } from '@/constants/heatmap-data';
+import { HeatmapMap } from '../../components/maps/heatmap-map';
+
+const visibleHeatmapIncidents = getVisibleHeatmapIncidents(DUMMY_HEATMAP_INCIDENTS);
 
 export default function HeatmapScreen() {
   return (
     <SafeAreaView style={styles.safeArea}>
-      <HeatmapMap />
+      <HeatmapMap incidents={visibleHeatmapIncidents} />
     </SafeAreaView>
   );
 }

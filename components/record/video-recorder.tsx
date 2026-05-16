@@ -8,6 +8,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Alert, Pressable, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
+import { requestLocationPermission } from '@/services/location';
 import { uploadRecordedVideo } from '@/services/video-upload';
 
 const MAX_RECORDING_SECONDS = 8;
@@ -93,7 +94,20 @@ export function VideoRecorder({ onClose }: VideoRecorderProps) {
           setIsUploading(true);
         }
 
-        await uploadRecordedVideo(video.uri);
+        const locationResult = await requestLocationPermission();
+
+        if (locationResult.status !== 'granted') {
+          throw new Error('Unable to attach your current location to this video.');
+        }
+
+        await uploadRecordedVideo(video.uri, {
+          location: {
+            accuracy: locationResult.location.coords.accuracy,
+            latitude: locationResult.location.coords.latitude,
+            longitude: locationResult.location.coords.longitude,
+            timestamp: locationResult.location.timestamp,
+          },
+        });
       }
     } catch (error) {
       const message =

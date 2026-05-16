@@ -1,8 +1,16 @@
-import Mapbox, { Camera, HeatmapLayer, MapView, ShapeSource, UserLocation } from '@rnmapbox/maps';
+import Mapbox, {
+  Camera,
+  CircleLayer,
+  HeatmapLayer,
+  MapView,
+  ShapeSource,
+  UserLocation,
+} from '@rnmapbox/maps';
 import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
+import type { HeatmapIncidentPoint } from '@/constants/heatmap-data';
 import { requestLocationPermission } from '@/services/location';
 
 const MAPBOX_ACCESS_TOKEN =
@@ -11,15 +19,12 @@ const DEFAULT_CENTER: [number, number] = [18.4241, -33.9249];
 
 Mapbox.setAccessToken(MAPBOX_ACCESS_TOKEN);
 
-export type HeatmapIncidentPoint = {
-  id: string;
-  latitude: number;
-  longitude: number;
-  weight?: number;
-};
-
 type HeatmapMapProps = {
   incidents?: HeatmapIncidentPoint[];
+  interactive?: boolean;
+  showLocationStatus?: boolean;
+  showUserLocation?: boolean;
+  zoomLevel?: number;
 };
 
 function toFeatureCollection(incidents: HeatmapIncidentPoint[]): GeoJSON.FeatureCollection {
@@ -29,7 +34,7 @@ function toFeatureCollection(incidents: HeatmapIncidentPoint[]): GeoJSON.Feature
       type: 'Feature',
       id: incident.id,
       properties: {
-        weight: incident.weight ?? 1,
+        weight: incident.reportedCases,
       },
       geometry: {
         type: 'Point',
@@ -39,7 +44,13 @@ function toFeatureCollection(incidents: HeatmapIncidentPoint[]): GeoJSON.Feature
   };
 }
 
-export function HeatmapMap({ incidents = [] }: HeatmapMapProps) {
+export function HeatmapMap({
+  incidents = [],
+  interactive = true,
+  showLocationStatus = true,
+  showUserLocation = true,
+  zoomLevel = 12,
+}: HeatmapMapProps) {
   const [centerCoordinate, setCenterCoordinate] = useState<[number, number]>(DEFAULT_CENTER);
   const [isLocating, setIsLocating] = useState(true);
   const [locationStatus, setLocationStatus] = useState<string | null>(null);
@@ -82,23 +93,23 @@ export function HeatmapMap({ incidents = [] }: HeatmapMapProps) {
   return (
     <View style={styles.container}>
       <MapView
-        attributionEnabled
-        compassEnabled={false}
+        attributionEnabled={interactive}
+        compassEnabled={interactive}
         logoEnabled={false}
         pitchEnabled
-        rotateEnabled
+        rotateEnabled={interactive}
         scaleBarEnabled={false}
-        scrollEnabled
+        scrollEnabled={interactive}
         style={styles.map}
         styleURL={Mapbox.StyleURL.Outdoors}
-        zoomEnabled>
+        zoomEnabled={interactive}>
         <Camera
           animationDuration={900}
           animationMode="flyTo"
           centerCoordinate={centerCoordinate}
-          zoomLevel={12}
+          zoomLevel={zoomLevel}
         />
-        <UserLocation visible />
+        {showUserLocation ? <UserLocation visible /> : null}
 
         {hasIncidents ? (
           <ShapeSource id="incident-heatmap-source" shape={incidentShape}>
@@ -112,24 +123,59 @@ export function HeatmapMap({ incidents = [] }: HeatmapMapProps) {
                   ['heatmap-density'],
                   0,
                   'rgba(87, 190, 71, 0)',
-                  0.35,
-                  '#C7F000',
-                  0.65,
-                  '#F8C034',
+                  0.18,
+                  'rgba(87, 190, 71, 0.55)',
+                  0.38,
+                  '#D9F45A',
+                  0.58,
+                  '#FFD166',
+                  0.78,
+                  '#F77F00',
                   1,
                   '#C22C2A',
                 ],
-                heatmapIntensity: 1.4,
-                heatmapOpacity: 0.82,
-                heatmapRadius: 28,
-                heatmapWeight: ['get', 'weight'],
+                heatmapIntensity: ['interpolate', ['linear'], ['zoom'], 9, 1.1, 13, 2.8],
+                heatmapOpacity: ['interpolate', ['linear'], ['zoom'], 11, 0.9, 15, 0.55],
+                heatmapRadius: ['interpolate', ['linear'], ['zoom'], 9, 26, 13, 54, 15, 72],
+                heatmapWeight: [
+                  'interpolate',
+                  ['linear'],
+                  ['get', 'weight'],
+                  6,
+                  0.25,
+                  15,
+                  1,
+                ],
+              }}
+            />
+            <CircleLayer
+              id="incident-hotspot-layer"
+              sourceID="incident-heatmap-source"
+              style={{
+                circleBlur: 0.25,
+                circleColor: [
+                  'interpolate',
+                  ['linear'],
+                  ['get', 'weight'],
+                  6,
+                  '#57BE47',
+                  10,
+                  '#FFD166',
+                  15,
+                  '#C22C2A',
+                ],
+                circleOpacity: ['interpolate', ['linear'], ['zoom'], 11, 0, 14, 0.72],
+                circleRadius: ['interpolate', ['linear'], ['get', 'weight'], 6, 5, 15, 13],
+                circleStrokeColor: '#FFFFFF',
+                circleStrokeOpacity: ['interpolate', ['linear'], ['zoom'], 11, 0, 14, 0.8],
+                circleStrokeWidth: 1,
               }}
             />
           </ShapeSource>
         ) : null}
       </MapView>
 
-      {isLocating || locationStatus ? (
+      {showLocationStatus && (isLocating || locationStatus) ? (
         <View style={styles.statusPill}>
           {isLocating ? <ActivityIndicator color="#57BE47" size="small" /> : null}
           <ThemedText style={styles.statusText}>

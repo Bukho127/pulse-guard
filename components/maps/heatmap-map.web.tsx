@@ -4,6 +4,7 @@ import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
 
 import { ThemedText } from '@/components/themed-text';
+import type { HeatmapIncidentPoint } from '@/constants/heatmap-data';
 import { requestLocationPermission } from '@/services/location';
 
 const MAPBOX_ACCESS_TOKEN =
@@ -12,15 +13,12 @@ const DEFAULT_CENTER: [number, number] = [18.4241, -33.9249];
 
 mapboxgl.accessToken = MAPBOX_ACCESS_TOKEN;
 
-export type HeatmapIncidentPoint = {
-  id: string;
-  latitude: number;
-  longitude: number;
-  weight?: number;
-};
-
 type HeatmapMapProps = {
   incidents?: HeatmapIncidentPoint[];
+  interactive?: boolean;
+  showLocationStatus?: boolean;
+  showUserLocation?: boolean;
+  zoomLevel?: number;
 };
 
 function toFeatureCollection(incidents: HeatmapIncidentPoint[]): GeoJSON.FeatureCollection {
@@ -30,7 +28,7 @@ function toFeatureCollection(incidents: HeatmapIncidentPoint[]): GeoJSON.Feature
       type: 'Feature',
       id: incident.id,
       properties: {
-        weight: incident.weight ?? 1,
+        weight: incident.reportedCases,
       },
       geometry: {
         type: 'Point',
@@ -40,7 +38,13 @@ function toFeatureCollection(incidents: HeatmapIncidentPoint[]): GeoJSON.Feature
   };
 }
 
-export function HeatmapMap({ incidents = [] }: HeatmapMapProps) {
+export function HeatmapMap({
+  incidents = [],
+  interactive = true,
+  showLocationStatus = true,
+  showUserLocation = true,
+  zoomLevel = 12,
+}: HeatmapMapProps) {
   const mapContainerRef = useRef<ViewType | null>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
   const [centerCoordinate, setCenterCoordinate] = useState<[number, number]>(DEFAULT_CENTER);
@@ -61,7 +65,7 @@ export function HeatmapMap({ incidents = [] }: HeatmapMapProps) {
         ];
 
         setCenterCoordinate(nextCenter);
-        mapRef.current?.flyTo({ center: nextCenter, zoom: 12, essential: true });
+        mapRef.current?.flyTo({ center: nextCenter, zoom: zoomLevel, essential: true });
         setLocationStatus(null);
       } else if (result.status === 'services_disabled') {
         setLocationStatus('Turn on location services to center the map.');
@@ -75,7 +79,7 @@ export function HeatmapMap({ incidents = [] }: HeatmapMapProps) {
     };
 
     void loadLocation();
-  }, []);
+  }, [zoomLevel]);
 
   useEffect(() => {
     if (!MAPBOX_ACCESS_TOKEN || !mapContainerRef.current || mapRef.current) {
@@ -85,23 +89,29 @@ export function HeatmapMap({ incidents = [] }: HeatmapMapProps) {
     const map = new mapboxgl.Map({
       container: mapContainerRef.current as unknown as HTMLElement,
       center: centerCoordinate,
-      zoom: 12,
+      zoom: zoomLevel,
       style: 'mapbox://styles/mapbox/outdoors-v12',
       attributionControl: false,
+      interactive,
     });
 
     mapRef.current = map;
 
-    map.addControl(new mapboxgl.AttributionControl({ compact: true }), 'bottom-right');
-    map.addControl(new mapboxgl.NavigationControl({ visualizePitch: true }), 'top-right');
-    map.addControl(
-      new mapboxgl.GeolocateControl({
-        positionOptions: { enableHighAccuracy: true },
-        trackUserLocation: true,
-        showUserHeading: true,
-      }),
-      'top-right'
-    );
+    if (interactive) {
+      map.addControl(new mapboxgl.AttributionControl({ compact: true }), 'bottom-right');
+      map.addControl(new mapboxgl.NavigationControl({ visualizePitch: true }), 'top-right');
+    }
+
+    if (showUserLocation) {
+      map.addControl(
+        new mapboxgl.GeolocateControl({
+          positionOptions: { enableHighAccuracy: true },
+          trackUserLocation: true,
+          showUserHeading: true,
+        }),
+        'top-right'
+      );
+    }
 
     map.on('load', () => {
       map.addSource('incident-heatmap-source', {
@@ -120,17 +130,48 @@ export function HeatmapMap({ incidents = [] }: HeatmapMapProps) {
             ['heatmap-density'],
             0,
             'rgba(87, 190, 71, 0)',
-            0.35,
-            '#C7F000',
-            0.65,
-            '#F8C034',
+            0.18,
+            'rgba(87, 190, 71, 0.55)',
+            0.38,
+            '#D9F45A',
+            0.58,
+            '#FFD166',
+            0.78,
+            '#F77F00',
             1,
             '#C22C2A',
           ],
-          'heatmap-intensity': 1.4,
-          'heatmap-opacity': hasIncidents ? 0.82 : 0,
-          'heatmap-radius': 28,
-          'heatmap-weight': ['get', 'weight'],
+          'heatmap-intensity': ['interpolate', ['linear'], ['zoom'], 9, 1.1, 13, 2.8],
+          'heatmap-opacity': hasIncidents
+            ? ['interpolate', ['linear'], ['zoom'], 11, 0.9, 15, 0.55]
+            : 0,
+          'heatmap-radius': ['interpolate', ['linear'], ['zoom'], 9, 26, 13, 54, 15, 72],
+          'heatmap-weight': ['interpolate', ['linear'], ['get', 'weight'], 6, 0.25, 15, 1],
+        },
+      });
+
+      map.addLayer({
+        id: 'incident-hotspot-layer',
+        type: 'circle',
+        source: 'incident-heatmap-source',
+        paint: {
+          'circle-blur': 0.25,
+          'circle-color': [
+            'interpolate',
+            ['linear'],
+            ['get', 'weight'],
+            6,
+            '#57BE47',
+            10,
+            '#FFD166',
+            15,
+            '#C22C2A',
+          ],
+          'circle-opacity': ['interpolate', ['linear'], ['zoom'], 11, 0, 14, 0.72],
+          'circle-radius': ['interpolate', ['linear'], ['get', 'weight'], 6, 5, 15, 13],
+          'circle-stroke-color': '#FFFFFF',
+          'circle-stroke-opacity': ['interpolate', ['linear'], ['zoom'], 11, 0, 14, 0.8],
+          'circle-stroke-width': 1,
         },
       });
     });
@@ -139,7 +180,7 @@ export function HeatmapMap({ incidents = [] }: HeatmapMapProps) {
       map.remove();
       mapRef.current = null;
     };
-  }, [centerCoordinate, hasIncidents, incidentShape]);
+  }, [centerCoordinate, hasIncidents, incidentShape, interactive, showUserLocation, zoomLevel]);
 
   useEffect(() => {
     const source = mapRef.current?.getSource('incident-heatmap-source');
@@ -152,7 +193,15 @@ export function HeatmapMap({ incidents = [] }: HeatmapMapProps) {
       mapRef.current.setPaintProperty(
         'incident-heatmap-layer',
         'heatmap-opacity',
-        hasIncidents ? 0.82 : 0
+        hasIncidents ? ['interpolate', ['linear'], ['zoom'], 11, 0.9, 15, 0.55] : 0
+      );
+    }
+
+    if (mapRef.current?.getLayer('incident-hotspot-layer')) {
+      mapRef.current.setPaintProperty(
+        'incident-hotspot-layer',
+        'circle-opacity',
+        hasIncidents ? ['interpolate', ['linear'], ['zoom'], 11, 0, 14, 0.72] : 0
       );
     }
   }, [hasIncidents, incidentShape]);
@@ -172,7 +221,7 @@ export function HeatmapMap({ incidents = [] }: HeatmapMapProps) {
     <View style={styles.container}>
       <View ref={mapContainerRef} style={styles.webMap} />
 
-      {isLocating || locationStatus ? (
+      {showLocationStatus && (isLocating || locationStatus) ? (
         <View style={styles.statusPill}>
           {isLocating ? <ActivityIndicator color="#57BE47" size="small" /> : null}
           <ThemedText style={styles.statusText}>
