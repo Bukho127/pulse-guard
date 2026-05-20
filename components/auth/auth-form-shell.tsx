@@ -1,10 +1,10 @@
+import AppleLogo from "@/assets/logos/apple_logo.svg";
+import GoogleLogo from "@/assets/logos/google_logo.svg";
+import FacebookLogo from "@/assets/logos/logos_facebook.svg";
 import { Ionicons } from "@expo/vector-icons";
-import { Link, router } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
+import { Link, router } from "expo-router";
 import { type ReactNode } from "react";
-import GoogleLogo from '@/assets/logos/google_logo.svg';
-import FacebookLogo from '@/assets/logos/logos_facebook.svg';
-import AppleLogo from '@/assets/logos/apple_logo.svg';
 
 import {
   Pressable,
@@ -35,12 +35,12 @@ type AuthFieldProps = {
   keyboardType?: "default" | "email-address" | "phone-pad";
   autoCapitalize?: "none" | "sentences" | "words" | "characters";
   autoComplete?:
-  | "email"
-  | "name"
-  | "new-password"
-  | "password"
-  | "tel"
-  | "username";
+    | "email"
+    | "name"
+    | "new-password"
+    | "password"
+    | "tel"
+    | "username";
   rightText?: string;
 };
 
@@ -89,7 +89,8 @@ export function AuthFormShell({
             style={({ pressed }) => [
               styles.primaryButton,
               pressed && styles.primaryButtonPressed,
-            ]}>
+            ]}
+          >
             <LinearGradient
               colors={["rgba(141, 141, 141, 0.25)", "rgba(255, 255, 255, 0)"]}
               start={{ x: 0.5, y: 0 }}
@@ -172,14 +173,13 @@ const styles = StyleSheet.create({
     flex: 0.38,
     backgroundColor: "#53BC43",
     paddingHorizontal: 28,
-    paddingTop: 10,
+    paddingTop: 16,
   },
   backButton: {
     width: 36,
     height: 36,
     alignItems: "center",
     justifyContent: "center",
-    marginTop: 50,
   },
   sheet: {
     flex: 2.5,
@@ -246,30 +246,40 @@ const styles = StyleSheet.create({
   },
   primaryButton: {
     marginTop: 34,
-    height: 48,
-    borderRadius: 12,
-    backgroundColor: "#262626",
+    height: 40,
+    borderRadius: 11,
+    backgroundColor: "#202020",
     alignItems: "center",
     justifyContent: "center",
+    overflow: "hidden",
+    position: "relative",
+    shadowColor: "#7f7f7f",
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: -4 },
+    elevation: 2,
+    borderWidth: 1,
+    borderColor: "rgba(66, 66, 66, 0.1)",
+    borderBottomColor: "rgba(0, 0, 0, 0.35)",
   },
   primaryButtonPressed: {
     opacity: 0.9,
     transform: [{ scale: 0.99 }],
   },
   innerHighlight: {
-    position: 'absolute',
+    position: "absolute",
     top: 0,
     left: 0,
     right: 0,
-    height: '30%',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
+    height: "30%",
+    borderTopLeftRadius: 12,
+    borderTopRightRadius: 12,
   },
   primaryButtonText: {
-    fontSize: 15,
-    lineHeight: 22,
+    fontSize: 16,
+    lineHeight: 21,
     color: "#FFFFFF",
-    fontFamily: "Geist_500Medium",
+    fontFamily: "Geist_400Regular",
   },
   socialSection: {
     marginTop: 36,

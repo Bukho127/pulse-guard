@@ -15,7 +15,7 @@ function formatLocation(places: Location.LocationGeocodedAddress[]) {
   const place = places[0];
 
   if (!place) {
-    return 'Location unavailable';
+    return 'Current location';
   }
 
   const area = place.district ?? place.name ?? place.street;

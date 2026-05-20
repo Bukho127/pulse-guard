@@ -1,6 +1,6 @@
-import { Stack } from 'expo-router';
+import { Stack } from "expo-router";
 
-import { SignInForm } from '@/components/auth/sign-in-form';
+import { SignInForm } from "@/components/auth/sign-in-form";
 
 export default function SignInScreen() {
   return (

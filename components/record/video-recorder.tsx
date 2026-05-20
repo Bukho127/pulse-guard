@@ -4,14 +4,14 @@ import {
   useCameraPermissions,
   useMicrophonePermissions,
 } from 'expo-camera';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Alert, Pressable, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
 import { requestLocationPermission } from '@/services/location';
 import { uploadRecordedVideo } from '@/services/video-upload';
 
-const MAX_RECORDING_SECONDS = 8;
+const MAX_RECORDING_SECONDS = 10;
 
 type VideoRecorderProps = {
   onClose?: () => void;
@@ -27,7 +27,10 @@ function formatDuration(seconds: number) {
 export function VideoRecorder({ onClose }: VideoRecorderProps) {
   const cameraRef = useRef<CameraView>(null);
   const isMountedRef = useRef(true);
+  const isRecordingRef = useRef(false);
+  const shouldUploadRecordingRef = useRef(true);
   const recordingPromiseRef = useRef<Promise<{ uri: string } | undefined> | null>(null);
+  const recordingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
   const [microphonePermission, requestMicrophonePermission] = useMicrophonePermissions();
   const [isCameraReady, setIsCameraReady] = useState(false);
@@ -39,11 +42,27 @@ export function VideoRecorder({ onClose }: VideoRecorderProps) {
   const hasMicrophonePermission = microphonePermission?.granted;
   const hasPermissions = hasCameraPermission && hasMicrophonePermission;
 
+  const stopActiveRecording = useCallback(() => {
+    if (!isRecordingRef.current && !recordingPromiseRef.current) {
+      return;
+    }
+
+    cameraRef.current?.stopRecording();
+  }, []);
+
   useEffect(() => {
     return () => {
       isMountedRef.current = false;
+      shouldUploadRecordingRef.current = false;
+
+      if (recordingTimeoutRef.current) {
+        clearTimeout(recordingTimeoutRef.current);
+      }
+
+      stopActiveRecording();
+      isRecordingRef.current = false;
     };
-  }, []);
+  }, [stopActiveRecording]);
 
   useEffect(() => {
     if (!isRecording) {
@@ -51,7 +70,7 @@ export function VideoRecorder({ onClose }: VideoRecorderProps) {
     }
 
     const interval = setInterval(() => {
-      setRecordingSeconds((seconds) => seconds + 1);
+      setRecordingSeconds((seconds) => Math.min(seconds + 1, MAX_RECORDING_SECONDS));
     }, 1000);
 
     return () => {
@@ -74,10 +93,12 @@ export function VideoRecorder({ onClose }: VideoRecorderProps) {
   };
 
   const startRecording = async () => {
-    if (!cameraRef.current || !isCameraReady || isRecording) {
+    if (!cameraRef.current || !isCameraReady || isRecordingRef.current) {
       return;
     }
 
+    isRecordingRef.current = true;
+    shouldUploadRecordingRef.current = true;
     setRecordingSeconds(0);
     setIsRecording(true);
 
@@ -86,10 +107,13 @@ export function VideoRecorder({ onClose }: VideoRecorderProps) {
         maxDuration: MAX_RECORDING_SECONDS,
       });
       recordingPromiseRef.current = recordingPromise;
+      recordingTimeoutRef.current = setTimeout(() => {
+        cameraRef.current?.stopRecording();
+      }, MAX_RECORDING_SECONDS * 1000);
 
       const video = await recordingPromise;
 
-      if (video?.uri) {
+      if (video?.uri && shouldUploadRecordingRef.current) {
         if (isMountedRef.current) {
           setIsUploading(true);
         }
@@ -119,26 +143,28 @@ export function VideoRecorder({ onClose }: VideoRecorderProps) {
         setIsUploading(false);
       }
 
+      isRecordingRef.current = false;
       recordingPromiseRef.current = null;
+
+      if (recordingTimeoutRef.current) {
+        clearTimeout(recordingTimeoutRef.current);
+        recordingTimeoutRef.current = null;
+      }
     }
   };
 
   const stopRecording = () => {
-    if (!isRecording) {
-      return;
-    }
-
-    cameraRef.current?.stopRecording();
+    stopActiveRecording();
   };
 
   const closeRecorder = () => {
-    if (isRecording) {
-      cameraRef.current?.stopRecording();
-    }
+    shouldUploadRecordingRef.current = false;
+    stopActiveRecording();
 
     onClose?.();
   };
 
+  // While permissions are being requested, show a loading state. If permissions are denied, show a prompt to enable them.
   if (!cameraPermission || !microphonePermission) {
     return (
       <View style={styles.stateScreen}>
@@ -153,7 +179,7 @@ export function VideoRecorder({ onClose }: VideoRecorderProps) {
       </View>
     );
   }
-
+// If we don't have permissions, show a prompt to enable them.
   if (!hasPermissions) {
     return (
       <View style={styles.stateScreen}>
@@ -180,7 +206,7 @@ export function VideoRecorder({ onClose }: VideoRecorderProps) {
       </View>
     );
   }
-
+// If we have permissions, show the camera view with recording controls.
   return (
     <View style={styles.container}>
       <CameraView
@@ -212,7 +238,8 @@ export function VideoRecorder({ onClose }: VideoRecorderProps) {
           </ThemedText>
         </View>
       </View>
-
+      
+      {/* this is the close button */}
       <Pressable
         accessibilityLabel="Close camera"
         accessibilityRole="button"
@@ -223,12 +250,17 @@ export function VideoRecorder({ onClose }: VideoRecorderProps) {
 
       <View pointerEvents="box-none" style={styles.bottomOverlay}>
         <Pressable
+        // using a ternary operator to change the accessibility label based on whether we're currently recording or not
           accessibilityLabel={isRecording ? 'Stop video recording' : 'Start video recording'}
           accessibilityRole="button"
           disabled={!isCameraReady || isUploading}
           onPressIn={() => {
             void startRecording();
           }}
+          // we use onPressIn to start recording immediately when the user presses the button,
+          // and onPressOut to stop recording as soon as they release it. 
+          // This allows for more natural recording behavior,
+          // where the length of the recording is determined by how long the user holds the button.
           onPressOut={stopRecording}
           style={({ pressed }) => [
             styles.recordButton,

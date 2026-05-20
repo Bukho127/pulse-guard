@@ -34,7 +34,6 @@
         "android.permission.CAMERA",
         "android.permission.RECORD_AUDIO"
       ]
-
     },
     "web": {
       "output": "static",
@@ -75,7 +74,8 @@
           }
         }
       ],
-      "expo-font"
+      "expo-font",
+      "expo-web-browser"
     ],
     "experiments": {
       "typedRoutes": true,

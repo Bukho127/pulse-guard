@@ -1,6 +1,8 @@
 import { Linking, Platform } from 'react-native';
 import * as Location from 'expo-location';
 
+const LOCATION_TIMEOUT_MS = 8000;
+
 export type LocationPermissionResult =
   | {
     status: 'granted';
@@ -31,7 +33,7 @@ export async function requestLocationPermission(): Promise<LocationPermissionRes
       return { status: 'services_disabled' };
     }
 
-    const location = await Location.getCurrentPositionAsync({});
+    const location = await getAvailableLocation();
     return { status: 'granted', location };
   } catch (error) {
     const message =
@@ -48,4 +50,44 @@ export async function openLocationSettings(): Promise<void> {
   }
 
   await Linking.openSettings();
+}
+
+async function getAvailableLocation() {
+  try {
+    return await withTimeout(
+      Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced,
+      }),
+      LOCATION_TIMEOUT_MS
+    );
+  } catch (error) {
+    const lastKnownLocation = await Location.getLastKnownPositionAsync({
+      maxAge: 10 * 60 * 1000,
+      requiredAccuracy: 5000,
+    });
+
+    if (lastKnownLocation) {
+      return lastKnownLocation;
+    }
+
+    throw error;
+  }
+}
+
+async function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => {
+      reject(new Error('Unable to read the current location.'));
+    }, timeoutMs);
+  });
+
+  try {
+    return await Promise.race([promise, timeoutPromise]);
+  } finally {
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+    }
+  }
 }
