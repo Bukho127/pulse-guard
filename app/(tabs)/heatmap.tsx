@@ -8,7 +8,7 @@ const visibleHeatmapIncidents = getVisibleHeatmapIncidents(DUMMY_HEATMAP_INCIDEN
 export default function HeatmapScreen() {
   return (
     <SafeAreaView style={styles.safeArea}>
-      <HeatmapMap incidents={visibleHeatmapIncidents} />
+      <HeatmapMap incidents={visibleHeatmapIncidents} showRoute />
     </SafeAreaView>
   );
 }

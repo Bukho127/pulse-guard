@@ -5,7 +5,14 @@ import 'mapbox-gl/dist/mapbox-gl.css';
 
 import { ThemedText } from '@/components/themed-text';
 import type { HeatmapIncidentPoint } from '@/constants/heatmap-data';
+import {
+  createRouteFeature,
+  createRoutePointFeature,
+  DEMO_ROUTE_COORDINATES,
+  type RouteCoordinate,
+} from '@/constants/route-data';
 import { requestLocationPermission } from '@/services/location';
+import { buildAnimatedRouteCoordinates } from '@/utils/animated-route';
 
 const MAPBOX_ACCESS_TOKEN =
   process.env.EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN ?? process.env.MAPBOX_ACCESS_TOKEN ?? '';
@@ -15,6 +22,9 @@ mapboxgl.accessToken = MAPBOX_ACCESS_TOKEN;
 
 type HeatmapMapProps = {
   incidents?: HeatmapIncidentPoint[];
+  routeCoordinates?: RouteCoordinate[];
+  routeAnimationDuration?: number;
+  showRoute?: boolean;
   interactive?: boolean;
   showLocationStatus?: boolean;
   showUserLocation?: boolean;
@@ -40,6 +50,9 @@ function toFeatureCollection(incidents: HeatmapIncidentPoint[]): GeoJSON.Feature
 
 export function HeatmapMap({
   incidents = [],
+  routeCoordinates = DEMO_ROUTE_COORDINATES,
+  routeAnimationDuration = 1900,
+  showRoute = false,
   interactive = true,
   showLocationStatus = true,
   showUserLocation = true,
@@ -47,12 +60,26 @@ export function HeatmapMap({
 }: HeatmapMapProps) {
   const mapContainerRef = useRef<ViewType | null>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
+  const frameRef = useRef<number | null>(null);
   const [centerCoordinate, setCenterCoordinate] = useState<[number, number]>(DEFAULT_CENTER);
   const [isLocating, setIsLocating] = useState(true);
   const [locationStatus, setLocationStatus] = useState<string | null>(null);
 
   const incidentShape = useMemo(() => toFeatureCollection(incidents), [incidents]);
   const hasIncidents = incidents.length > 0;
+  const hasRoute = showRoute && routeCoordinates.length > 1;
+  const routeOriginShape = useMemo(
+    () => createRoutePointFeature(routeCoordinates[0] ?? DEFAULT_CENTER, 'origin'),
+    [routeCoordinates]
+  );
+  const routeDestinationShape = useMemo(
+    () =>
+      createRoutePointFeature(
+        routeCoordinates[routeCoordinates.length - 1] ?? DEFAULT_CENTER,
+        'destination'
+      ),
+    [routeCoordinates]
+  );
 
   useEffect(() => {
     const loadLocation = async () => {
@@ -114,6 +141,73 @@ export function HeatmapMap({
     }
 
     map.on('load', () => {
+      if (hasRoute) {
+        map.addSource('animated-route-source', {
+          type: 'geojson',
+          data: createRouteFeature([routeCoordinates[0]]),
+        });
+        map.addSource('route-origin-source', {
+          type: 'geojson',
+          data: routeOriginShape,
+        });
+        map.addSource('route-destination-source', {
+          type: 'geojson',
+          data: routeDestinationShape,
+        });
+
+        map.addLayer({
+          id: 'animated-route-glow',
+          type: 'line',
+          source: 'animated-route-source',
+          paint: {
+            'line-color': 'rgba(87, 190, 71, 0.24)',
+            'line-width': 12,
+          },
+          layout: {
+            'line-cap': 'round',
+            'line-join': 'round',
+          },
+        });
+
+        map.addLayer({
+          id: 'animated-route-line',
+          type: 'line',
+          source: 'animated-route-source',
+          paint: {
+            'line-color': '#57BE47',
+            'line-width': 5,
+          },
+          layout: {
+            'line-cap': 'round',
+            'line-join': 'round',
+          },
+        });
+
+        map.addLayer({
+          id: 'route-origin-dot',
+          type: 'circle',
+          source: 'route-origin-source',
+          paint: {
+            'circle-color': '#FFFFFF',
+            'circle-radius': 6,
+            'circle-stroke-color': '#202020',
+            'circle-stroke-width': 3,
+          },
+        });
+
+        map.addLayer({
+          id: 'route-destination-dot',
+          type: 'circle',
+          source: 'route-destination-source',
+          paint: {
+            'circle-color': '#57BE47',
+            'circle-radius': 7,
+            'circle-stroke-color': '#FFFFFF',
+            'circle-stroke-width': 3,
+          },
+        });
+      }
+
       map.addSource('incident-heatmap-source', {
         type: 'geojson',
         data: incidentShape,
@@ -177,10 +271,25 @@ export function HeatmapMap({
     });
 
     return () => {
+      if (frameRef.current) {
+        cancelAnimationFrame(frameRef.current);
+      }
+
       map.remove();
       mapRef.current = null;
     };
-  }, [centerCoordinate, hasIncidents, incidentShape, interactive, showUserLocation, zoomLevel]);
+  }, [
+    centerCoordinate,
+    hasIncidents,
+    hasRoute,
+    incidentShape,
+    interactive,
+    routeCoordinates,
+    routeDestinationShape,
+    routeOriginShape,
+    showUserLocation,
+    zoomLevel,
+  ]);
 
   useEffect(() => {
     const source = mapRef.current?.getSource('incident-heatmap-source');
@@ -205,6 +314,36 @@ export function HeatmapMap({
       );
     }
   }, [hasIncidents, incidentShape]);
+
+  useEffect(() => {
+    if (!hasRoute) {
+      return;
+    }
+
+    const startedAt = Date.now();
+
+    const animate = () => {
+      const elapsed = Date.now() - startedAt;
+      const progress = Math.min(elapsed / routeAnimationDuration, 1);
+      const source = mapRef.current?.getSource('animated-route-source');
+
+      if (source && 'setData' in source) {
+        source.setData(createRouteFeature(buildAnimatedRouteCoordinates(routeCoordinates, progress)));
+      }
+
+      if (progress < 1) {
+        frameRef.current = requestAnimationFrame(animate);
+      }
+    };
+
+    frameRef.current = requestAnimationFrame(animate);
+
+    return () => {
+      if (frameRef.current) {
+        cancelAnimationFrame(frameRef.current);
+      }
+    };
+  }, [hasRoute, routeAnimationDuration, routeCoordinates]);
 
   if (!MAPBOX_ACCESS_TOKEN) {
     return (

@@ -75,23 +75,19 @@ export default function HomeScreen() {
               </Pressable>
             </View>
 
-            <Pressable
-              accessibilityRole="button"
-              onPress={() => {
-                router.push('/(tabs)/heatmap');
-              }}
-              style={({ pressed }) => [styles.mapPreview, pressed && styles.pressed]}>
+            <View style={styles.mapPreview}>
               <HeatmapMap
                 incidents={visibleHeatmapIncidents}
-                interactive={false}
+                interactive
+                showRoute
                 showLocationStatus={false}
                 showUserLocation={false}
-                zoomLevel={10}
+                zoomLevel={11.3}
               />
               <View style={styles.mapOverlay}>
                 <ThemedText style={styles.mapOverlayText}>Cape Town</ThemedText>
               </View>
-            </Pressable>
+            </View>
           </View>
 
           <View style={styles.tipPanel}>
