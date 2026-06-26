@@ -1,8 +1,15 @@
 export const API_BASE_URL =
   import.meta.env.VITE_API_URL || "http://localhost:5001";
 
-class ApiError extends Error {
-  constructor(message, status, payload) {
+// ---------------------------------------------------------------------------
+// Error
+// ---------------------------------------------------------------------------
+
+export class ApiError extends Error {
+  status: number;
+  payload: unknown;
+
+  constructor(message: string, status: number, payload: unknown) {
     super(message);
     this.name = "ApiError";
     this.status = status;
@@ -10,9 +17,75 @@ class ApiError extends Error {
   }
 }
 
-async function parseResponse(response) {
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
+
+export interface LoginPayload {
+  email: string;
+  password: string;
+}
+
+export interface Pagination {
+  page: number;
+  pages: number;
+  total: number;
+  hasPrev: boolean;
+  hasNext: boolean;
+  limit?: number;
+  perPage?: number;
+  per_page?: number;
+  pageSize?: number;
+  page_size?: number;
+  [key: string]: unknown;
+}
+
+export interface Incident {
+  id: string | number;
+  [key: string]: unknown;
+}
+
+export interface IncidentsResponse {
+  incidents: Incident[];
+  pagination: Pagination | null;
+}
+
+export interface Notification {
+  id: string | number;
+  [key: string]: unknown;
+}
+
+export interface UnreadNotificationsResponse {
+  count: number;
+  notifications: Notification[];
+}
+
+export interface HeatmapFeature {
+  [key: string]: unknown;
+}
+
+export interface HeatmapMetadata {
+  [key: string]: unknown;
+}
+
+export interface HeatmapData {
+  type?: string;
+  features: HeatmapFeature[];
+  metadata?: HeatmapMetadata;
+  [key: string]: unknown;
+}
+
+export interface OSRMRoute {
+  [key: string]: unknown;
+}
+
+// ---------------------------------------------------------------------------
+// Internal helpers
+// ---------------------------------------------------------------------------
+
+async function parseResponse(response: Response): Promise<unknown> {
   const text = await response.text();
-  let data;
+  let data: unknown;
 
   try {
     data = text ? JSON.parse(text) : null;
@@ -22,15 +95,17 @@ async function parseResponse(response) {
 
   if (!response.ok) {
     const message =
-      data?.message || response.statusText || "API request failed";
+      (data as Record<string, string>)?.message ||
+      response.statusText ||
+      "API request failed";
     throw new ApiError(message, response.status, data);
   }
 
   return data;
 }
 
-function buildHeaders(token, json = true) {
-  const headers = {};
+function buildHeaders(token: string | null, json = true): HeadersInit {
+  const headers: Record<string, string> = {};
 
   if (json) {
     headers["Content-Type"] = "application/json";
@@ -43,12 +118,18 @@ function buildHeaders(token, json = true) {
   return headers;
 }
 
-async function request(path, options = {}) {
+async function request(
+  path: string,
+  options: RequestInit = {},
+): Promise<unknown> {
   const response = await fetch(`${API_BASE_URL}${path}`, options);
   return parseResponse(response);
 }
 
-function normalizePagination(pagination = {}, incidentCount = 0) {
+function normalizePagination(
+  pagination: Record<string, unknown> | undefined | null,
+  incidentCount = 0,
+): Pagination | null {
   if (!pagination || typeof pagination !== "object") {
     return null;
   }
@@ -80,47 +161,61 @@ function normalizePagination(pagination = {}, incidentCount = 0) {
     page,
     pages,
     total,
-    hasPrev:
+    hasPrev: Boolean(
       pagination.hasPrev ??
       pagination.hasPreviousPage ??
       pagination.has_previous_page ??
       page > 1,
-    hasNext:
+    ),
+    hasNext: Boolean(
       pagination.hasNext ??
       pagination.hasNextPage ??
       pagination.has_next_page ??
       page < pages,
+    ),
   };
 }
 
-function normalizeIncidentsResponse(response) {
+function normalizeIncidentsResponse(response: unknown): IncidentsResponse {
   if (Array.isArray(response)) {
-    return {
-      incidents: response,
-      pagination: null,
-    };
+    return { incidents: response as Incident[], pagination: null };
   }
 
+  const res = response as Record<string, unknown>;
+
   const incidents =
-    response?.incidents ||
-    response?.results ||
-    response?.data?.incidents ||
-    response?.data?.results ||
-    response?.data ||
+    res?.incidents ||
+    res?.results ||
+    (res?.data as Record<string, unknown>)?.incidents ||
+    (res?.data as Record<string, unknown>)?.results ||
+    res?.data ||
     [];
 
-  const normalizedIncidents = Array.isArray(incidents) ? incidents : [];
-  const pagination =
-    normalizePagination(response?.pagination, normalizedIncidents.length) ||
-    normalizePagination(response?.data?.pagination, normalizedIncidents.length);
+  const normalizedIncidents = Array.isArray(incidents)
+    ? (incidents as Incident[])
+    : [];
 
-  return {
-    incidents: normalizedIncidents,
-    pagination,
-  };
+  const pagination =
+    normalizePagination(
+      res?.pagination as Record<string, unknown>,
+      normalizedIncidents.length,
+    ) ||
+    normalizePagination(
+      (res?.data as Record<string, unknown>)?.pagination as Record<
+        string,
+        unknown
+      >,
+      normalizedIncidents.length,
+    );
+
+  return { incidents: normalizedIncidents, pagination };
 }
 
-export async function loginPersonnel(payload) {
+// ---------------------------------------------------------------------------
+// Public API
+// ---------------------------------------------------------------------------
+
+export async function loginPersonnel(payload: LoginPayload): Promise<unknown> {
   const body = JSON.stringify(payload);
   console.log("Payload being sent:", payload);
   console.log("Stringified body:", body);
@@ -132,7 +227,11 @@ export async function loginPersonnel(payload) {
   });
 }
 
-export async function fetchIncidents(token, page, limit) {
+export async function fetchIncidents(
+  token: string,
+  page?: number,
+  limit?: number,
+): Promise<IncidentsResponse> {
   console.log(
     "fetchIncidents called with token:",
     token ? "present" : "missing",
@@ -150,20 +249,20 @@ export async function fetchIncidents(token, page, limit) {
       method: "GET",
       headers,
     });
-
     return normalizeIncidentsResponse(response);
   } catch (err) {
+    const apiErr = err as ApiError;
     console.error(
       "fetchIncidents error:",
-      err.status,
-      err.message,
-      err.payload,
+      apiErr.status,
+      apiErr.message,
+      apiErr.payload,
     );
     throw err;
   }
 }
 
-export async function fetchAllIncidents(token) {
+export async function fetchAllIncidents(token: string): Promise<Incident[]> {
   try {
     const response = await request("/incidents/all", {
       method: "GET",
@@ -172,13 +271,13 @@ export async function fetchAllIncidents(token) {
 
     return normalizeIncidentsResponse(response).incidents;
   } catch (err) {
-    if (err.status !== 404) {
+    if ((err as ApiError).status !== 404) {
       throw err;
     }
   }
 
   const firstPage = await fetchIncidents(token);
-  const incidents = [...firstPage.incidents];
+  const incidents: Incident[] = [...firstPage.incidents];
   const pagination = firstPage.pagination;
 
   if (!pagination?.pages || pagination.pages <= 1) {
@@ -193,13 +292,14 @@ export async function fetchAllIncidents(token) {
     pagination.page_size ||
     firstPage.incidents.length ||
     10;
+
   const remainingPages = Array.from(
     { length: pagination.pages - pagination.page },
     (_, index) => pagination.page + index + 1,
   );
 
   const responses = await Promise.all(
-    remainingPages.map((page) => fetchIncidents(token, page, limit)),
+    remainingPages.map((page) => fetchIncidents(token, page, Number(limit))),
   );
 
   responses.forEach((response) => {
@@ -209,7 +309,11 @@ export async function fetchAllIncidents(token) {
   return incidents;
 }
 
-export async function updateIncidentStatus(token, incidentId, status) {
+export async function updateIncidentStatus(
+  token: string,
+  incidentId: string | number,
+  status: string,
+): Promise<unknown> {
   if (!incidentId) {
     throw new Error("Missing incident ID for status update.");
   }
@@ -221,7 +325,7 @@ export async function updateIncidentStatus(token, incidentId, status) {
   });
 }
 
-export async function fetchNotificationsCount(token) {
+export async function fetchNotificationsCount(token: string): Promise<number> {
   const data = await request("/notifications/unread", {
     method: "GET",
     headers: buildHeaders(token, false),
@@ -235,104 +339,96 @@ export async function fetchNotificationsCount(token) {
     return 0;
   }
 
-  if (typeof data.count === "number") {
-    return data.count;
-  }
+  const d = data as Record<string, unknown>;
 
-  if (typeof data.unreadCount === "number") {
-    return data.unreadCount;
-  }
-
-  if (Array.isArray(data.notifications)) {
-    return data.notifications.length;
-  }
-
-  if (Array.isArray(data.data)) {
-    return data.data.length;
-  }
+  if (typeof d.count === "number") return d.count;
+  if (typeof d.unreadCount === "number") return d.unreadCount;
+  if (Array.isArray(d.notifications)) return d.notifications.length;
+  if (Array.isArray(d.data)) return (d.data as unknown[]).length;
 
   return 0;
 }
 
-export async function fetchUnreadNotifications(token) {
+export async function fetchUnreadNotifications(
+  token: string,
+): Promise<UnreadNotificationsResponse> {
   const data = await request("/notifications/unread", {
     method: "GET",
     headers: buildHeaders(token, false),
   });
 
   if (Array.isArray(data)) {
-    return {
-      count: data.length,
-      notifications: data,
-    };
+    return { count: data.length, notifications: data as Notification[] };
   }
 
   if (!data || typeof data !== "object") {
-    return {
-      count: 0,
-      notifications: [],
-    };
+    return { count: 0, notifications: [] };
   }
 
+  const d = data as Record<string, unknown>;
+  const dd = d.data as Record<string, unknown> | undefined;
+
   const notifications =
-    data.notifications ||
-    data.data?.notifications ||
-    data.data ||
-    data.results ||
-    [];
+    d.notifications || dd?.notifications || d.data || d.results || [];
 
   const count =
-    data.count ||
-    data.unreadCount ||
-    data.data?.count ||
-    data.data?.unreadCount ||
+    d.count ||
+    d.unreadCount ||
+    dd?.count ||
+    dd?.unreadCount ||
     (Array.isArray(notifications) ? notifications.length : 0);
 
   return {
-    count,
-    notifications: Array.isArray(notifications) ? notifications : [],
+    count: Number(count),
+    notifications: Array.isArray(notifications)
+      ? (notifications as Notification[])
+      : [],
   };
 }
 
-export async function markNotificationAsRead(token, notificationId) {
+export async function markNotificationAsRead(
+  token: string,
+  notificationId: string | number,
+): Promise<unknown> {
   if (!notificationId) {
     throw new Error("Missing notification ID for marking as read.");
   }
 
   return request(`/notifications/${encodeURIComponent(notificationId)}/read`, {
     method: "PUT",
-    headers: buildHeaders(token, false), // set json=false if payload is empty, standard headers handle the rest
+    headers: buildHeaders(token, false),
   });
 }
 
 /**
- * Fetch all heatmap data
- * @param {string} token - Authentication token
- * @returns {Promise<Object>} Heatmap data with H3 hexagon features and metadata
+ * Fetch all heatmap data.
  */
-export async function fetchHeatmapPoints(token) {
+export async function fetchHeatmapPoints(token: string): Promise<HeatmapData> {
   const data = await request("/heatmap", {
     method: "GET",
     headers: buildHeaders(token, false),
   });
 
-  // Handle response format
-  if (data?.type === "heatmap" && data?.features) {
-    return data;
+  const d = data as Record<string, unknown>;
+
+  if (d?.type === "heatmap" && d?.features) {
+    return d as HeatmapData;
   }
 
-  // Backward compatibility for old format
-  return data?.heatmap || data || { features: [], metadata: {} };
+  return (
+    (d?.heatmap as HeatmapData) ||
+    (d as HeatmapData) || { features: [], metadata: {} }
+  );
 }
 
 /**
- * Fetch heatmap data for a specific month
- * @param {string} token - Authentication token
- * @param {string} month - Month in YYYY-MM format (e.g., "2026-06")
- * @returns {Promise<Object>} Heatmap data with H3 hexagon features
+ * Fetch heatmap data for a specific month (YYYY-MM).
  */
-export async function fetchHeatmapByMonth(token, month) {
-  if (!month || !month.match(/^\d{4}-\d{2}$/)) {
+export async function fetchHeatmapByMonth(
+  token: string,
+  month: string,
+): Promise<HeatmapData> {
+  if (!month || !/^\d{4}-\d{2}$/.test(month)) {
     throw new Error("Invalid month format. Use YYYY-MM");
   }
 
@@ -342,47 +438,61 @@ export async function fetchHeatmapByMonth(token, month) {
     headers: buildHeaders(token, false),
   });
 
-  // Handle response format
-  if (data?.type === "heatmap" && data?.features) {
-    return data;
+  const d = data as Record<string, unknown>;
+
+  if (d?.type === "heatmap" && d?.features) {
+    return d as HeatmapData;
   }
 
-  // Backward compatibility
-  return data?.heatmap || data || { features: [], metadata: {} };
+  return (
+    (d?.heatmap as HeatmapData) ||
+    (d as HeatmapData) || { features: [], metadata: {} }
+  );
 }
 
-//fetch OSMR data for a route between two points
+/**
+ * Fetch an OSRM route between two coordinates.
+ *
+ * NOTE: The original source had a truncated/broken function signature and
+ * unreachable code after `throw`. This has been reconstructed to a working
+ * state — verify the endpoint URL and parameter names against your backend.
+ */
 export async function fetchOSRMRoute(
-  startLng,
-  startLat,
-  endLng,
-    {
-      method: "GET",
-      headers: buildHeaders(token, false),
-    },
-  );
+  token: string,
+  startLng: number,
+  startLat: number,
+  endLng: number,
+  endLat: number,
+): Promise<OSRMRoute> {
+  const url = `${API_BASE_URL}/route?startLng=${startLng}&startLat=${startLat}&endLng=${endLng}&endLat=${endLat}`;
+
+  const response = await fetch(url, {
+    method: "GET",
+    headers: buildHeaders(token, false) as HeadersInit,
+  });
+
   console.log("OSRM response status:", response.status);
 
   if (!response.ok) {
-    throw new Error(`OSRM request failed with status ${response.status}`);
     console.error("OSRM request failed:", {
       status: response.status,
       statusText: response.statusText,
       url: response.url,
     });
+    throw new Error(`OSRM request failed with status ${response.status}`);
   }
 
-  return response.json(); // backend already returns geometry directly, no further parsing needed
+  return response.json() as Promise<OSRMRoute>;
 }
 
 /**
- * Fetch heatmap data for a date range
- * @param {string} token - Authentication token
- * @param {string} startDate - Start date in YYYY-MM-DD format
- * @param {string} endDate - End date in YYYY-MM-DD format
- * @returns {Promise<Object>} Heatmap data with H3 hexagon features
+ * Fetch heatmap data for a date range (YYYY-MM-DD).
  */
-export async function fetchHeatmapByDateRange(token, startDate, endDate) {
+export async function fetchHeatmapByDateRange(
+  token: string,
+  startDate: string,
+  endDate: string,
+): Promise<HeatmapData> {
   if (!startDate || !endDate) {
     throw new Error("startDate and endDate are required (YYYY-MM-DD format)");
   }
@@ -393,13 +503,16 @@ export async function fetchHeatmapByDateRange(token, startDate, endDate) {
     headers: buildHeaders(token, false),
   });
 
-  // Handle response format
-  if (data?.type === "heatmap" && data?.features) {
-    return data;
+  const d = data as Record<string, unknown>;
+
+  if (d?.type === "heatmap" && d?.features) {
+    return d as HeatmapData;
   }
 
-  // Backward compatibility
-  return data?.heatmap || data || { features: [], metadata: {} };
+  return (
+    (d?.heatmap as HeatmapData) ||
+    (d as HeatmapData) || { features: [], metadata: {} }
+  );
 }
 
 export default {
@@ -407,9 +520,12 @@ export default {
   loginPersonnel,
   fetchIncidents,
   fetchAllIncidents,
+  updateIncidentStatus,
   fetchNotificationsCount,
   fetchUnreadNotifications,
+  markNotificationAsRead,
   fetchHeatmapPoints,
   fetchHeatmapByMonth,
   fetchHeatmapByDateRange,
+  fetchOSRMRoute,
 };
