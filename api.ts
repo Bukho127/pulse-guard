@@ -1,9 +1,10 @@
 export const API_BASE_URL =
-  import.meta.env.VITE_API_URL || "http://localhost:5001";
+  process.env.EXPO_PUBLIC_API_URL ||
+  process.env.VITE_API_URL ||
+  "http://localhost:5001";
 
 // ---------------------------------------------------------------------------
 // Error
-// ---------------------------------------------------------------------------
 
 export class ApiError extends Error {
   status: number;

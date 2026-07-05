@@ -1,8 +1,11 @@
 import { Ionicons } from '@expo/vector-icons';
+import { useFocusEffect } from '@react-navigation/native';
 import { useRouter } from 'expo-router';
+import { useCallback, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { fetchIncidents, type Incident } from '@/api';
 import { HomeHeader } from '@/components/home/home-header';
 import { ThemedText } from '@/components/themed-text';
 import { DUMMY_HEATMAP_INCIDENTS, getVisibleHeatmapIncidents } from '@/constants/heatmap-data';
@@ -18,8 +21,85 @@ const highestReportedCases = Math.max(
 );
 const riskLabel = highestReportedCases >= 12 ? 'Medium risk' : 'Low risk';
 
+type ReportProgressState = 'idle' | 'sent' | 'acknowledged';
+
+function getIncidentTimestamp(incident: Incident) {
+  const timestamp =
+    incident.createdAt ||
+    incident.created_at ||
+    incident.reportedAt ||
+    incident.reported_at ||
+    incident.updatedAt ||
+    incident.updated_at ||
+    incident.timestamp;
+
+  if (typeof timestamp !== 'string' && typeof timestamp !== 'number') {
+    return 0;
+  }
+
+  const parsedTimestamp = new Date(timestamp).getTime();
+  return Number.isNaN(parsedTimestamp) ? 0 : parsedTimestamp;
+}
+
+function getLatestIncident(incidents: Incident[]) {
+  return [...incidents].sort((first, second) => getIncidentTimestamp(second) - getIncidentTimestamp(first))[0];
+}
+
+function getReportProgressState(incident: Incident | null): ReportProgressState {
+  if (!incident) {
+    return 'idle';
+  }
+
+  const status = String(incident.status ?? incident.state ?? incident.incidentStatus ?? '').toLowerCase();
+
+  if (status.includes('acknowledged')) {
+    return 'acknowledged';
+  }
+
+  return 'sent';
+}
+
 export default function HomeScreen() {
   const router = useRouter();
+  const [latestIncident, setLatestIncident] = useState<Incident | null>(null);
+  const [isLoadingReportStatus, setIsLoadingReportStatus] = useState(false);
+
+  useFocusEffect(
+    useCallback(() => {
+      let isActive = true;
+
+      async function loadReportStatus() {
+        setIsLoadingReportStatus(true);
+
+        try {
+          const response = await fetchIncidents('', 1, 10);
+
+          if (isActive) {
+            setLatestIncident(getLatestIncident(response.incidents) ?? null);
+          }
+        } catch {
+          if (isActive) {
+            setLatestIncident(null);
+          }
+        } finally {
+          if (isActive) {
+            setIsLoadingReportStatus(false);
+          }
+        }
+      }
+
+      void loadReportStatus();
+
+      return () => {
+        isActive = false;
+      };
+    }, []),
+  );
+
+  const reportProgressState = getReportProgressState(latestIncident);
+  const isReportSent =
+    reportProgressState === 'sent' || reportProgressState === 'acknowledged';
+  const isReportAcknowledged = reportProgressState === 'acknowledged';
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -99,6 +179,82 @@ export default function HomeScreen() {
               <ThemedText style={styles.tipCopy}>
                 Keep your distance and record only when it is safe to do so.
               </ThemedText>
+            </View>
+          </View>
+
+          <View style={[styles.reportProgressPanel, !isReportSent && styles.reportProgressPanelIdle]}>
+            <View style={styles.reportProgressHeader}>
+              <View style={styles.sectionHeaderText}>
+                <ThemedText style={styles.sectionTitle}>Report status</ThemedText>
+                <ThemedText style={styles.sectionCopy}>
+                  {isLoadingReportStatus
+                    ? 'Checking your latest incident report.'
+                    : isReportSent
+                    ? 'Your latest video report is being handled.'
+                    : 'Record and send a video to start incident tracking.'}
+                </ThemedText>
+              </View>
+
+              <View style={[styles.reportStatusBadge, isReportSent && styles.reportStatusBadgeActive]}>
+                <ThemedText
+                  style={[styles.reportStatusText, isReportSent && styles.reportStatusTextActive]}>
+                  {isLoadingReportStatus
+                    ? 'Checking'
+                    : isReportAcknowledged
+                    ? 'Acknowledged'
+                    : isReportSent
+                    ? 'Sent'
+                    : 'Inactive'}
+                </ThemedText>
+              </View>
+            </View>
+
+            <View style={styles.progressTrack}>
+              <View style={styles.progressStep}>
+                <View style={[styles.progressNode, isReportSent && styles.progressNodeActive]}>
+                  <Ionicons
+                    name={isReportSent ? 'checkmark' : 'arrow-up-outline'}
+                    size={16}
+                    color={isReportSent ? '#FFFFFF' : '#9A9A9A'}
+                  />
+                </View>
+                <View style={styles.progressStepText}>
+                  <ThemedText style={[styles.progressStepTitle, isReportSent && styles.progressStepTitleActive]}>
+                    Video sent
+                  </ThemedText>
+                  <ThemedText style={styles.progressStepCopy}>
+                    {isReportSent ? 'Evidence has been submitted.' : 'Waiting for upload.'}
+                  </ThemedText>
+                </View>
+              </View>
+
+              <View style={[styles.progressConnector, isReportAcknowledged && styles.progressConnectorActive]} />
+
+              <View style={styles.progressStep}>
+                <View
+                  style={[
+                    styles.progressNode,
+                    isReportAcknowledged && styles.progressNodeActive,
+                  ]}>
+                  <Ionicons
+                    name={isReportAcknowledged ? 'checkmark' : 'shield-checkmark-outline'}
+                    size={16}
+                    color={isReportAcknowledged ? '#FFFFFF' : '#9A9A9A'}
+                  />
+                </View>
+                <View style={styles.progressStepText}>
+                  <ThemedText
+                    style={[
+                      styles.progressStepTitle,
+                      isReportAcknowledged && styles.progressStepTitleActive,
+                    ]}>
+                    Acknowledged
+                  </ThemedText>
+                  <ThemedText style={styles.progressStepCopy}>
+                    {isReportAcknowledged ? 'Authorities have acknowledged it.' : 'Pending response.'}
+                  </ThemedText>
+                </View>
+              </View>
             </View>
           </View>
         </ScrollView>
@@ -294,6 +450,102 @@ const styles = StyleSheet.create({
     color: '#666666',
     fontSize: 12,
     lineHeight: 17,
+    fontFamily: 'Geist_400Regular',
+  },
+  reportProgressPanel: {
+    marginTop: 24,
+    borderRadius: 8,
+    padding: 16,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E1F1DE',
+  },
+  reportProgressPanelIdle: {
+    borderColor: '#EEEEEE',
+    backgroundColor: '#FAFAFA',
+  },
+  reportProgressHeader: {
+    minHeight: 38,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  reportStatusBadge: {
+    minWidth: 76,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 10,
+    backgroundColor: '#F0F0F0',
+    borderWidth: 1,
+    borderColor: '#E1E1E1',
+  },
+  reportStatusBadgeActive: {
+    backgroundColor: '#F7FAF6',
+    borderColor: '#E1F1DE',
+  },
+  reportStatusText: {
+    color: '#77777B',
+    fontSize: 12,
+    lineHeight: 16,
+    fontFamily: 'Geist_500Medium',
+  },
+  reportStatusTextActive: {
+    color: '#2D7F24',
+  },
+  progressTrack: {
+    marginTop: 18,
+    gap: 12,
+  },
+  progressStep: {
+    minHeight: 44,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  progressNode: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#EFEFEF',
+    borderWidth: 1,
+    borderColor: '#E1E1E1',
+  },
+  progressNodeActive: {
+    backgroundColor: '#57BE47',
+    borderColor: '#57BE47',
+  },
+  progressConnector: {
+    width: 2,
+    height: 18,
+    marginLeft: 15,
+    backgroundColor: '#E1E1E1',
+  },
+  progressConnectorActive: {
+    backgroundColor: '#57BE47',
+  },
+  progressStepText: {
+    flex: 1,
+    minWidth: 0,
+  },
+  progressStepTitle: {
+    color: '#77777B',
+    fontSize: 14,
+    lineHeight: 18,
+    fontFamily: 'Geist_500Medium',
+  },
+  progressStepTitleActive: {
+    color: '#202020',
+  },
+  progressStepCopy: {
+    marginTop: 2,
+    color: '#77777B',
+    fontSize: 12,
+    lineHeight: 16,
     fontFamily: 'Geist_400Regular',
   },
   pressed: {
