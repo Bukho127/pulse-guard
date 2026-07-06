@@ -1,5 +1,5 @@
 import { LinearGradient } from "expo-linear-gradient";
-import { Link, router } from "expo-router";
+import { router } from "expo-router";
 import {
   Pressable,
   StyleSheet,
@@ -9,7 +9,9 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import PulseGuardLogo from "@/assets/logos/pulse-guard-logo.svg";
+import { ExternalLink } from "@/components/external-link";
 import { ThemedText } from "@/components/themed-text";
+import { PRIVACY_POLICY_URL, TERMS_OF_USE_URL } from "@/constants/legal-links";
 import * as Haptics from "expo-haptics";
 
 export default function OnboardingScreen() {
@@ -76,15 +78,15 @@ export default function OnboardingScreen() {
 
           <ThemedText style={styles.disclaimer}>
             By continuing you are agreeing with Pulse Guard&apos;s{" "}
-            <Link href="/terms">
+            <ExternalLink href={TERMS_OF_USE_URL}>
               <ThemedText style={styles.inlineLink}>
                 Terms of Service
               </ThemedText>
-            </Link>{" "}
+            </ExternalLink>{" "}
             and{" "}
-            <Link href="/privacy">
+            <ExternalLink href={PRIVACY_POLICY_URL}>
               <ThemedText style={styles.inlineLink}>Privacy Policy</ThemedText>
-            </Link>
+            </ExternalLink>
           </ThemedText>
         </View>
       </View>
