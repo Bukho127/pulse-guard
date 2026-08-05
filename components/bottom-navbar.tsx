@@ -1,32 +1,32 @@
-import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
-import { Pressable, StyleSheet, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import type { BottomTabBarProps } from "@react-navigation/bottom-tabs";
+import { Pressable, StyleSheet, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { ThemedText } from '@/components/themed-text';
-import HeatmapIcon from '@/assets/icons/heatmap-icon.svg';
-import HomeIcon from '@/assets/icons/Home-icon.svg';
-import RecordIcon from '@/assets/icons/record-icon.svg';
+import HeatmapIcon from "@/assets/icons/heatmap-icon.svg";
+import HomeIcon from "@/assets/icons/Home-icon.svg";
+import RecordIcon from "@/assets/icons/record-icon.svg";
+import { ThemedText } from "@/components/themed-text";
 
-const ACTIVE_COLOR = '#57BE47';
-const RECORD_COLOR = '#C22C2A';
-const TEXT_COLOR = '#111111';
+const ACTIVE_COLOR = "#57BE47";
+const RECORD_COLOR = "#C22C2A";
+const TEXT_COLOR = "#111111";
 const INACTIVE_OPACITY = 0.72;
 
 const TAB_CONFIG = {
   home: {
-    label: 'Home',
+    label: "Home",
     icon: HomeIcon,
     iconWidth: 25,
     iconHeight: 28,
   },
   record: {
-    label: 'Record',
+    label: "Record",
     icon: RecordIcon,
     iconWidth: 45,
     iconHeight: 45,
   },
   heatmap: {
-    label: 'Heatmaps',
+    label: "Heatmaps",
     icon: HeatmapIcon,
     iconWidth: 25,
     iconHeight: 29,
@@ -35,7 +35,11 @@ const TAB_CONFIG = {
 
 type TabName = keyof typeof TAB_CONFIG;
 
-export function BottomNavbar({ state, descriptors, navigation }: BottomTabBarProps) {
+export function BottomNavbar({
+  state,
+  descriptors,
+  navigation,
+}: BottomTabBarProps) {
   const insets = useSafeAreaInsets();
 
   return (
@@ -50,11 +54,12 @@ export function BottomNavbar({ state, descriptors, navigation }: BottomTabBarPro
         const isFocused = state.index === index;
         const Icon = tab.icon;
         const accessibilityLabel =
-          descriptors[route.key].options.tabBarAccessibilityLabel ?? `${tab.label} tab`;
+          descriptors[route.key].options.tabBarAccessibilityLabel ??
+          `${tab.label} tab`;
 
         const onPress = () => {
           const event = navigation.emit({
-            type: 'tabPress',
+            type: "tabPress",
             target: route.key,
             canPreventDefault: true,
           });
@@ -73,23 +78,31 @@ export function BottomNavbar({ state, descriptors, navigation }: BottomTabBarPro
             onPress={onPress}
             style={({ pressed }) => [
               styles.tab,
-              route.name === 'record' && styles.recordTab,
+              route.name === "record" && styles.recordTab,
               pressed && styles.pressed,
-            ]}>
-            {isFocused && route.name !== 'record' ? <View style={styles.activeIndicator} /> : null}
+            ]}
+          >
+            {isFocused && route.name !== "record" ? (
+              <View style={styles.activeIndicator} />
+            ) : null}
 
             <Icon
               width={tab.iconWidth}
               height={tab.iconHeight}
-              style={[route.name !== 'record' && !isFocused ? styles.inactiveIcon : undefined]}
+              style={[
+                route.name !== "record" && !isFocused
+                  ? styles.inactiveIcon
+                  : undefined,
+              ]}
             />
 
             <ThemedText
               style={[
                 styles.label,
-                route.name === 'record' && styles.recordLabel,
-                route.name !== 'record' && !isFocused && styles.inactiveLabel,
-              ]}>
+                route.name === "record" && styles.recordLabel,
+                route.name !== "record" && !isFocused && styles.inactiveLabel,
+              ]}
+            >
               {tab.label}
             </ThemedText>
           </Pressable>
@@ -101,32 +114,32 @@ export function BottomNavbar({ state, descriptors, navigation }: BottomTabBarPro
 
 const styles = StyleSheet.create({
   shell: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
     minHeight: 74,
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-around',
-    backgroundColor: '#FFFFFF',
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-around",
+    backgroundColor: "#ffffff",
     borderTopWidth: 1,
-    borderTopColor: '#F0F0F0',
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: -3 },
-    shadowOpacity: 0.08,
-    shadowRadius: 5,
-    elevation: 8,
+    borderTopColor: "#F0F0F0",
+    zIndex: 10,
   },
   tab: {
     width: 100,
     minHeight: 68,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
     gap: 2,
-    position: 'relative',
+    position: "relative",
   },
   recordTab: {
     paddingTop: 5,
   },
   activeIndicator: {
-    position: 'absolute',
+    position: "absolute",
     top: 0,
     width: 74,
     height: 4,
@@ -139,7 +152,7 @@ const styles = StyleSheet.create({
     color: TEXT_COLOR,
     fontSize: 12,
     lineHeight: 16,
-    fontFamily: 'Geist_400Regular',
+    fontFamily: "Geist_400Regular",
   },
   inactiveLabel: {
     opacity: INACTIVE_OPACITY,

@@ -1,7 +1,66 @@
-export const API_BASE_URL =
+import Constants from "expo-constants";
+import { Platform } from "react-native";
+
+const DEFAULT_API_PORT = "5001";
+
+function normalizeApiBaseUrl(url: string): string {
+  return url.replace(/\/+$/, "");
+}
+
+function getDevServerHost(): string | null {
+  const hostUri =
+    Constants.expoConfig?.hostUri ||
+    Constants.expoGoConfig?.debuggerHost ||
+    Constants.manifest2?.extra?.expoClient?.hostUri;
+
+  if (typeof hostUri !== "string" || !hostUri) {
+    return null;
+  }
+
+  return hostUri.split(":")[0] || null;
+}
+
+function getDefaultApiBaseUrl(): string {
+  if (!__DEV__) {
+    return "http://localhost:5001";
+  }
+
+  if (Platform.OS === "android") {
+    const devServerHost = getDevServerHost();
+
+    if (devServerHost && devServerHost !== "localhost") {
+      return `http://${devServerHost}:${DEFAULT_API_PORT}`;
+    }
+
+    return `http://10.0.2.2:${DEFAULT_API_PORT}`;
+  }
+
+  return "http://localhost:5001";
+}
+
+const expoExtra =
+  (Constants.expoConfig as any)?.extra ||
+  (Constants.manifest2 as any)?.extra ||
+  (Constants.manifest as any)?.extra ||
+  (Constants.expoGoConfig as any)?.extra ||
+  (Constants.manifest as any)?.extra;
+
+const environmentApiUrl =
+  expoExtra?.EXPO_PUBLIC_API_URL ||
+  expoExtra?.API_URL ||
   process.env.EXPO_PUBLIC_API_URL ||
   process.env.VITE_API_URL ||
-  "http://localhost:5001";
+  process.env.API_URL;
+
+export const API_BASE_URL = normalizeApiBaseUrl(
+  environmentApiUrl || getDefaultApiBaseUrl(),
+);
+
+console.log('Resolved environmentApiUrl:', environmentApiUrl);
+console.log('Resolved API_BASE_URL:', API_BASE_URL);
+
+// Diagnostic: log resolved API base for debugging on device
+console.log('Resolved API_BASE_URL:', API_BASE_URL);
 
 // ---------------------------------------------------------------------------
 // Error
@@ -80,6 +139,13 @@ export interface OSRMRoute {
   [key: string]: unknown;
 }
 
+export interface CurrentUser {
+  id?: string | number;
+  name: string;
+  email?: string;
+  [key: string]: unknown;
+}
+
 // ---------------------------------------------------------------------------
 // Internal helpers
 // ---------------------------------------------------------------------------
@@ -123,8 +189,18 @@ async function request(
   path: string,
   options: RequestInit = {},
 ): Promise<unknown> {
-  const response = await fetch(`${API_BASE_URL}${path}`, options);
-  return parseResponse(response);
+  const url = `${API_BASE_URL}${path}`;
+
+  try {
+    const response = await fetch(url, options);
+    return parseResponse(response);
+  } catch (error) {
+    console.error("API network request failed:", {
+      url,
+      message: error instanceof Error ? error.message : String(error),
+    });
+    throw error;
+  }
 }
 
 function normalizePagination(
@@ -212,6 +288,62 @@ function normalizeIncidentsResponse(response: unknown): IncidentsResponse {
   return { incidents: normalizedIncidents, pagination };
 }
 
+function pickString(...values: unknown[]): string | undefined {
+  const value = values.find(
+    (candidate) => typeof candidate === "string" && candidate.trim(),
+  );
+
+  return typeof value === "string" ? value.trim() : undefined;
+}
+
+function normalizeCurrentUser(response: unknown): CurrentUser {
+  if (!response || typeof response !== "object") {
+    throw new Error("Invalid user profile response");
+  }
+
+  const payload = response as Record<string, unknown>;
+  const nested =
+    (payload.user as Record<string, unknown> | undefined) ||
+    (payload.profile as Record<string, unknown> | undefined) ||
+    (payload.personnel as Record<string, unknown> | undefined) ||
+    (payload.data as Record<string, unknown> | undefined) ||
+    payload;
+
+  const firstName = pickString(
+    nested.firstName,
+    nested.first_name,
+    nested.givenName,
+    nested.given_name,
+  );
+  const lastName = pickString(
+    nested.lastName,
+    nested.last_name,
+    nested.surname,
+    nested.familyName,
+    nested.family_name,
+  );
+  const fullName = pickString(
+    nested.name,
+    nested.fullName,
+    nested.full_name,
+    [firstName, lastName].filter(Boolean).join(" "),
+  );
+
+  if (!fullName) {
+    throw new Error("User profile response is missing a name");
+  }
+
+  return {
+    ...nested,
+    id: (nested.id || nested._id || nested.userId || nested.user_id) as
+      | string
+      | number
+      | undefined,
+    name: fullName,
+    email: pickString(nested.email, nested.emailAddress, nested.email_address),
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
@@ -226,6 +358,32 @@ export async function loginPersonnel(payload: LoginPayload): Promise<unknown> {
     headers: buildHeaders(null, true),
     body,
   });
+}
+
+export async function fetchCurrentUser(token: string): Promise<CurrentUser> {
+  const paths = ["/users/me", "/auth/me", "/me", "/profile", "/police/me"];
+  let lastError: unknown;
+
+  for (const path of paths) {
+    try {
+      const response = await request(path, {
+        method: "GET",
+        headers: buildHeaders(token, false),
+      });
+
+      return normalizeCurrentUser(response);
+    } catch (error) {
+      if ((error as ApiError).status !== 404) {
+        throw error;
+      }
+
+      lastError = error;
+    }
+  }
+
+  throw lastError instanceof Error
+    ? lastError
+    : new Error("User profile endpoint was not found");
 }
 
 export async function fetchIncidents(
@@ -519,6 +677,7 @@ export async function fetchHeatmapByDateRange(
 export default {
   API_BASE_URL,
   loginPersonnel,
+  fetchCurrentUser,
   fetchIncidents,
   fetchAllIncidents,
   updateIncidentStatus,

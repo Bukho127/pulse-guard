@@ -32,7 +32,7 @@ function RippleCircle({ delay }: { delay: number }) {
         false
       )
     );
-  }, []);
+  }, [delay, opacity, scale]);
 
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [{ scale: scale.value }],
@@ -54,7 +54,7 @@ export function RippleCircles() {
 
 const styles = StyleSheet.create({
   ripple: {
-    position: 'absolute',   // ← absolute so they don't push the shield out
+    position: 'absolute',
     width: OUTER_SIZE,
     height: OUTER_SIZE,
     borderRadius: OUTER_SIZE / 2,

@@ -6,15 +6,8 @@ import { LinearGradient } from "expo-linear-gradient";
 import { Link, router } from "expo-router";
 import { type ReactNode } from "react";
 
-import {
-  Pressable,
-  SafeAreaView,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
+import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 type AuthFormShellProps = {
   title: string;
@@ -42,6 +35,10 @@ type AuthFieldProps = {
     | "tel"
     | "username";
   rightText?: string;
+  // optional controlled input props
+  value?: string;
+  onChangeText?: (text: string) => void;
+  name?: string;
 };
 
 export function AuthFormShell({
@@ -143,6 +140,8 @@ export function AuthField({
   autoCapitalize = "none",
   autoComplete,
   rightText,
+  value,
+  onChangeText,
 }: AuthFieldProps) {
   return (
     <View style={styles.fieldGroup}>
@@ -158,6 +157,8 @@ export function AuthField({
         placeholder={placeholder}
         placeholderTextColor="#B3B3B3"
         secureTextEntry={secureTextEntry}
+        value={value}
+        onChangeText={onChangeText}
         style={styles.input}
       />
     </View>
