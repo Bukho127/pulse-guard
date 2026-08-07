@@ -138,26 +138,19 @@ function IncidentStatusStepper({
                 step.state === "complete" && styles.stepNodeActive,
               ]}
             >
-              <Ionicons
-                name={step.state === "complete" ? "checkmark" : "time-outline"}
-                size={16}
-                color={step.state === "complete" ? "#FFFFFF" : "#9A9A9A"}
-              />
+              {step.state === "complete" && (
+                <Ionicons name="checkmark" size={16} color="#FFFFFF" />
+              )}
             </View>
 
             {index < steps.length - 1 && (
-              <View style={styles.stepConnector}>
-                {new Array(8).fill(null).map((_, dotIndex) => (
-                  <View
-                    key={dotIndex}
-                    style={[
-                      styles.stepConnectorDot,
-                      steps[index].state === "complete" &&
-                        styles.stepConnectorDotActive,
-                    ]}
-                  />
-                ))}
-              </View>
+              <View
+                style={[
+                  styles.stepConnector,
+                  steps[index].state === "complete" &&
+                    styles.stepConnectorActive,
+                ]}
+              />
             )}
           </Fragment>
         ))}
@@ -540,21 +533,11 @@ const styles = StyleSheet.create({
   },
   stepConnector: {
     flex: 1,
-    height: 32,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  stepConnectorDot: {
-    width: 4,
-    height: 3,
-    borderRadius: 1,
+    height: 5,
+    borderRadius: 3,
     backgroundColor: "#E1E1E1",
   },
   stepConnectorActive: {
-    borderTopColor: "#57BE47",
-  },
-  stepConnectorDotActive: {
     backgroundColor: "#57BE47",
   },
   stepperLabelRow: {
