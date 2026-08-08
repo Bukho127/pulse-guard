@@ -138,9 +138,11 @@ function IncidentStatusStepper({
                 step.state === "complete" && styles.stepNodeActive,
               ]}
             >
-              {step.state === "complete" && (
-                <Ionicons name="checkmark" size={16} color="#FFFFFF" />
-              )}
+              <Ionicons
+                name="checkmark-sharp"
+                size={17}
+                color={step.state === "complete" ? "#57BE47" : "#B8B8B8"}
+              />
             </View>
 
             {index < steps.length - 1 && (
@@ -528,13 +530,13 @@ const styles = StyleSheet.create({
     borderColor: "#E1E1E1",
   },
   stepNodeActive: {
-    backgroundColor: "#57BE47",
+    backgroundColor: "#F4FBF2",
     borderColor: "#57BE47",
   },
   stepConnector: {
     flex: 1,
-    height: 5,
-    borderRadius: 3,
+    height: 3,
+    borderRadius: 2,
     backgroundColor: "#E1E1E1",
   },
   stepConnectorActive: {
