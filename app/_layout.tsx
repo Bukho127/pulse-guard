@@ -16,7 +16,7 @@ import "react-native-reanimated";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { AuthProvider } from "@/context/AuthContext";
-import { LegalAcceptanceProvider } from "@/context/LegalAcceptanceContext";
+
 import { NotificationProvider } from "@/context/NotificationContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useLocationPermissionOnLaunch } from "@/hooks/use-location-permission-on-launch";
@@ -54,30 +54,25 @@ export default function RootLayout() {
 
   return (
     <SafeAreaProvider>
-      <NotificationProvider>
-        <LegalAcceptanceProvider>
-          <AuthProvider>
-            <ThemeProvider
-              value={colorScheme === "dark" ? DarkTheme : DefaultTheme}
-            >
-              <Stack>
-                <Stack.Screen name="index" options={{ headerShown: false }} />
-                <Stack.Screen
-                  name="register"
-                  options={{ headerShown: false }}
-                />
-                <Stack.Screen name="sign-in" options={{ headerShown: false }} />
-                <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-                <Stack.Screen
-                  name="modal"
-                  options={{ presentation: "modal", title: "Modal" }}
-                />
-              </Stack>
-              <StatusBar style="auto" />
-            </ThemeProvider>
-          </AuthProvider>
-        </LegalAcceptanceProvider>
-      </NotificationProvider>
+      <AuthProvider>
+        <NotificationProvider>
+          <ThemeProvider
+            value={colorScheme === "dark" ? DarkTheme : DefaultTheme}
+          >
+            <Stack>
+              <Stack.Screen name="index" options={{ headerShown: false }} />
+              <Stack.Screen name="register" options={{ headerShown: false }} />
+              <Stack.Screen name="sign-in" options={{ headerShown: false }} />
+              <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+              <Stack.Screen
+                name="modal"
+                options={{ presentation: "modal", title: "Modal" }}
+              />
+            </Stack>
+            <StatusBar style="auto" />
+          </ThemeProvider>
+        </NotificationProvider>
+      </AuthProvider>
     </SafeAreaProvider>
   );
 }

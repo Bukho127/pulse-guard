@@ -56,14 +56,46 @@ export const API_BASE_URL = normalizeApiBaseUrl(
   environmentApiUrl || getDefaultApiBaseUrl(),
 );
 
-console.log('Resolved environmentApiUrl:', environmentApiUrl);
-console.log('Resolved API_BASE_URL:', API_BASE_URL);
+console.log("Resolved environmentApiUrl:", environmentApiUrl);
+console.log("Resolved API_BASE_URL:", API_BASE_URL);
 
 // Diagnostic: log resolved API base for debugging on device
-console.log('Resolved API_BASE_URL:', API_BASE_URL);
+console.log("Resolved API_BASE_URL:", API_BASE_URL);
 
 // ---------------------------------------------------------------------------
 // Error
+
+//these are here not permanent, but to help with debugging the push token registration and removal process.
+export const removePushToken = async (
+  authToken: string,
+  pushToken: string,
+): Promise<void> => {
+  try {
+    await fetch(
+      `${API_BASE_URL}/push-tokens/${encodeURIComponent(pushToken)}`,
+      {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${authToken}` },
+      },
+    );
+  } catch (error) {
+    console.error("Failed to remove push token:", error);
+  }
+};
+export const savePushToken = async (
+  token: string,
+  pushToken: string,
+): Promise<void> => {
+  try {
+    await fetch(`${API_BASE_URL}/push-tokens`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token, pushToken }),
+    });
+  } catch (error) {
+    console.error("Failed to save push token:", error);
+  }
+};
 
 export class ApiError extends Error {
   status: number;
@@ -688,4 +720,6 @@ export default {
   fetchHeatmapByMonth,
   fetchHeatmapByDateRange,
   fetchOSRMRoute,
+  removePushToken,
+  savePushToken,
 };
