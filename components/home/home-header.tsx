@@ -347,12 +347,6 @@ export function HomeHeader() {
             <ThemedText style={styles.drawerSectionLabel}>Account</ThemedText>
             <View style={styles.drawerSection}>
               <DrawerItem
-                icon="person-outline"
-                label="Edit profile"
-                helper="Update your name, photo, and details"
-                onPress={() => navigateFromDrawer("/profile/edit")}
-              />
-              <DrawerItem
                 icon="notifications-circle-outline"
                 label="Notification settings"
                 helper="Choose what alerts you receive"
@@ -409,7 +403,7 @@ export function HomeHeader() {
               <DrawerItem
                 icon="trash-outline"
                 label="Delete account"
-                helper="Permanently remove your account and data"
+                helper="remove your account and data"
                 labelStyle={styles.drawerDangerLabel}
                 iconColor="#C4291C"
                 onPress={() => navigateFromDrawer("/settings/delete-account")}
