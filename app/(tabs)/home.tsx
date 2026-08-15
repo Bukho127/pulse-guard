@@ -19,6 +19,11 @@ import {
 import { HomeHeader } from "@/components/home/home-header";
 import { ThemedText } from "@/components/themed-text";
 import type { HeatmapIncidentPoint } from "@/constants/heatmap-data";
+import {
+  GeofenceHotspot,
+  startHotspotGeofencing,
+  stopHotspotGeofencing,
+} from "@/services/geofencing";
 import { requestLocationPermission } from "@/services/location";
 import { HeatmapMap } from "../../components/maps/heatmap-map";
 
@@ -32,6 +37,23 @@ interface IncidentStep {
   label: string;
   subLabel: string;
   state: StepState;
+}
+
+// Rough distance in meters between two latitude/longitude points using the Haversine formula.
+function distanceMeters(
+  lat1: number,
+  lon1: number,
+  lat2: number,
+  lon2: number,
+): number {
+  const R = 6371000;
+  const toRad = (deg: number) => (deg * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
 function getIncidentTimestamp(incident: Incident) {
@@ -115,6 +137,30 @@ function toHeatmapIncidents(
     longitude: point.longitude,
     reportedCases: point.count,
   }));
+}
+
+// Builds the list of hotspots to geofence, sorted nearest-first, since
+// iOS caps simultaneously monitored regions at 20. This function
+// truncates to the nearest N internally. this will we help full when we have a large number of hotspots in the future, but for now it's just a precaution.
+function buildGeofenceHotspots(
+  analytics: MobileCrimeAnalytics,
+  userCoords: { latitude: number; longitude: number },
+): GeofenceHotspot[] {
+  return analytics.localCrimePoints
+    .map((point, index) => ({
+      id: getHeatmapPointId(point, index),
+      latitude: point.latitude,
+      longitude: point.longitude,
+      reportedCases: point.count,
+      distance: distanceMeters(
+        userCoords.latitude,
+        userCoords.longitude,
+        point.latitude,
+        point.longitude,
+      ),
+    }))
+    .sort((a, b) => a.distance - b.distance)
+    .map(({ distance, ...rest }) => rest);
 }
 
 function IncidentStatusStepper({
@@ -261,7 +307,10 @@ export default function HomeScreen() {
 
       const socket = createMobileSocket(token);
 
-      function applyAnalytics(analytics: MobileCrimeAnalytics) {
+      function applyAnalytics(
+        analytics: MobileCrimeAnalytics,
+        userCoords?: { latitude: number; longitude: number },
+      ) {
         if (!isActive) {
           return;
         }
@@ -270,6 +319,12 @@ export default function HomeScreen() {
         setHeatmapIncidents(toHeatmapIncidents(analytics));
         setHeatmapError(null);
         setIsLoadingHeatmap(false);
+
+        // Register geofences around the nearest hotspots so the OS can
+        if (userCoords) {
+          const geofenceHotspots = buildGeofenceHotspots(analytics, userCoords);
+          void startHotspotGeofencing(geofenceHotspots);
+        }
       }
 
       async function requestAnalyticsForCurrentLocation() {
@@ -298,7 +353,10 @@ export default function HomeScreen() {
             result.location.coords.longitude,
           );
 
-          applyAnalytics(analytics);
+          applyAnalytics(analytics, {
+            latitude: result.location.coords.latitude,
+            longitude: result.location.coords.longitude,
+          });
         } catch (error) {
           if (!isActive) {
             return;
@@ -315,7 +373,7 @@ export default function HomeScreen() {
 
       const unsubscribeAnalytics = subscribeToMobileCrimeAnalytics(
         socket,
-        applyAnalytics,
+        (analytics) => applyAnalytics(analytics),
       );
       const unsubscribeErrors = subscribeToMobileCrimeAnalyticsErrors(
         socket,
@@ -343,6 +401,7 @@ export default function HomeScreen() {
         unsubscribeAnalytics();
         unsubscribeErrors();
         socket.disconnect();
+        void stopHotspotGeofencing();
       };
     }, [token]),
   );

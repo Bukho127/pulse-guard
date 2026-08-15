@@ -11,6 +11,7 @@
     "ios": {
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "Pulse Guard uses your location to detect and report your current position during safety events.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "Pulse Guard uses your location to detect and report your current position during safety events to warn you.",
         "NSCameraUsageDescription": "Pulse Guard uses your camera to record video reports.",
         "NSMicrophoneUsageDescription": "Pulse Guard uses your microphone to include audio with video reports.",
         "BuildIdentifier": "dev.expo.pulseguard"
@@ -31,6 +32,7 @@
       "permissions": [
         "android.permission.ACCESS_COARSE_LOCATION",
         "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_BACKGROUND_LOCATION",
         "android.permission.CAMERA",
         "android.permission.RECORD_AUDIO"
       ]
@@ -76,7 +78,8 @@
       ],
       "expo-font",
       "expo-web-browser",
-      "@react-native-google-signin/google-signin"
+      "@react-native-google-signin/google-signin",
+      "expo-task-manager"
     ],
     "experiments": {
       "typedRoutes": true,
