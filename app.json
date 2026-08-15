@@ -75,7 +75,8 @@
         }
       ],
       "expo-font",
-      "expo-web-browser"
+      "expo-web-browser",
+      "@react-native-google-signin/google-signin"
     ],
     "experiments": {
       "typedRoutes": true,
@@ -83,7 +84,7 @@
     },
     "extra": {
       "router": {},
-      "EXPO_PUBLIC_API_URL": "http://192.168.88.227:5001",
+      "EXPO_PUBLIC_API_URL": "http://10.0.2.2:5001",
       "eas": {
         "projectId": "00cecbc1-d34d-479c-9537-bcb658774674"
       }

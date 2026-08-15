@@ -1,3 +1,4 @@
+import "@/services/googleSignIn";
 import {
   Geist_400Regular,
   Geist_500Medium,
@@ -14,6 +15,7 @@ import { StatusBar } from "expo-status-bar";
 import { useEffect } from "react";
 import "react-native-reanimated";
 import { SafeAreaProvider } from "react-native-safe-area-context";
+import "../shims/text-decoder-shim";
 
 import { AuthProvider } from "@/context/AuthContext";
 

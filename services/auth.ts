@@ -1,9 +1,9 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { API_BASE_URL } from "@/api";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 const TOKEN_KEY = "jwt_token";
 
-export const DEBUG_AUTH_BYPASS = true;
+export const DEBUG_AUTH_BYPASS = false;
 export const DEBUG_AUTH_TOKEN = "debug-auth-token";
 
 function extractToken(data: unknown): string | null {
@@ -32,7 +32,7 @@ export async function loginRequest(email: string, password: string) {
   }
 
   try {
-    const url = `${API_BASE_URL}/login`;
+    const url = `${API_BASE_URL}/auth/login`;
     console.log("Auth login URL:", url);
 
     const res = await fetch(url, {
@@ -58,13 +58,45 @@ export async function loginRequest(email: string, password: string) {
   }
 }
 
+export async function googleIdTokenLoginRequest(idToken: string) {
+  try {
+    const url = `${API_BASE_URL}/auth/google`;
+    console.log("Auth Google login URL:", url);
+
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ idToken }),
+    });
+
+    console.log("Google auth response status:", res.status);
+
+    if (!res.ok) {
+      const rawText = await res.text();
+      console.log("Google auth failed - raw body:", rawText);
+      const err = JSON.parse(rawText || "{}");
+      throw new Error(err.message || "Google sign-in failed");
+    }
+
+    const data = await res.json();
+    const token = extractToken(data);
+    if (!token) throw new Error("No token returned from server");
+
+    await AsyncStorage.setItem(TOKEN_KEY, token);
+    return token;
+  } catch (err: any) {
+    console.log("Google auth caught error:", err);
+    throw new Error(`Network request failed: ${err?.message || String(err)}`);
+  }
+}
+
 export async function registerRequest(
   name: string,
   email: string,
   password: string,
 ) {
   try {
-    const url = `${API_BASE_URL}/register`;
+    const url = `${API_BASE_URL}/auth/register`;
     console.log("Auth register URL:", url);
 
     const res = await fetch(url, {
@@ -101,7 +133,10 @@ export async function getToken() {
   }
 
   const token = await AsyncStorage.getItem(TOKEN_KEY);
-  console.log("Stored auth token:", token ? `present (${token.slice(0, 10)}...)` : "missing");
+  console.log(
+    "Stored auth token:",
+    token ? `present (${token.slice(0, 10)}...)` : "missing",
+  );
   return token;
 }
 

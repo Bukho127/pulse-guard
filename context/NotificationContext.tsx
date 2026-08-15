@@ -52,11 +52,6 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({
   const notificationListener = useRef<EventSubscription | null>(null);
   const responseListener = useRef<EventSubscription | null>(null);
 
-  // Track the last known-good pair together, captured at the moment both
-  // were valid. This is what lets cleanup work correctly: by the time
-  // `token` goes falsy (the signal that triggers cleanup), we can no
-  // longer read the outgoing JWT from `token` itself — so we snapshot it
-  // here instead of trying to read it after the fact.
   const lastKnownAuthToken = useRef<string | null>(null);
   const lastKnownPushToken = useRef<string | null>(null);
 
@@ -90,9 +85,6 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({
     };
   }, [router]);
 
-  // Persist the token pair to the backend, and snapshot both values the
-  // moment they're saved successfully — this snapshot is what cleanup
-  // will use later, since `token` won't be readable anymore once signed out.
   useEffect(() => {
     if (!token || !expoPushToken) {
       return;
@@ -108,17 +100,13 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({
       });
   }, [token, expoPushToken]);
 
-  // On logout (token transitions from present to falsy), remove this
-  // device's push token from the backend using the *snapshotted* auth
-  // token from before it cleared — not the current (now-empty) `token`.
   useEffect(() => {
     if (!token && lastKnownAuthToken.current && lastKnownPushToken.current) {
-      removePushToken(
-        lastKnownAuthToken.current,
-        lastKnownPushToken.current,
-      ).catch(() => {
-        // best-effort cleanup; don't block logout on this failing
-      });
+      const authToken = lastKnownAuthToken.current;
+      const pushToken = lastKnownPushToken.current;
+
+      removePushToken(authToken, pushToken).catch(() => {});
+
       lastKnownAuthToken.current = null;
       lastKnownPushToken.current = null;
     }

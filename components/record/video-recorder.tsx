@@ -133,16 +133,25 @@ export function VideoRecorder({ onClose }: VideoRecorderProps) {
         }
 
         setDebugStatus("Uploading video");
-        await uploadRecordedVideo(video.uri, {
-          location: {
-            accuracy: locationResult.location.coords.accuracy,
-            latitude: locationResult.location.coords.latitude,
-            longitude: locationResult.location.coords.longitude,
-            timestamp: locationResult.location.timestamp,
-          },
-        });
-        setDebugStatus("Video uploaded");
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        try {
+          await uploadRecordedVideo(video.uri, {
+            location: {
+              accuracy: locationResult.location.coords.accuracy,
+              latitude: locationResult.location.coords.latitude,
+              longitude: locationResult.location.coords.longitude,
+              timestamp: locationResult.location.timestamp,
+            },
+          });
+          setDebugStatus("Video uploaded");
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        } catch (uploadErr) {
+          const uploadMessage =
+            uploadErr instanceof Error
+              ? uploadErr.message
+              : "Video upload failed. Please try again.";
+          setDebugStatus(uploadMessage);
+          throw new Error(uploadMessage);
+        }
       }
     } catch (error) {
       const message =

@@ -1,7 +1,9 @@
 import Constants from "expo-constants";
 import { Platform } from "react-native";
+import { io, type Socket } from "socket.io-client";
 
 const DEFAULT_API_PORT = "5001";
+const MOBILE_H3_RESOLUTION = 10;
 
 function normalizeApiBaseUrl(url: string): string {
   return url.replace(/\/+$/, "");
@@ -35,67 +37,24 @@ function getDefaultApiBaseUrl(): string {
     return `http://10.0.2.2:${DEFAULT_API_PORT}`;
   }
 
-  return "http://localhost:5001";
+  return `http://localhost:${DEFAULT_API_PORT}`;
 }
 
 const expoExtra =
   (Constants.expoConfig as any)?.extra ||
   (Constants.manifest2 as any)?.extra ||
   (Constants.manifest as any)?.extra ||
-  (Constants.expoGoConfig as any)?.extra ||
-  (Constants.manifest as any)?.extra;
+  (Constants.expoGoConfig as any)?.extra;
 
 const environmentApiUrl =
   expoExtra?.EXPO_PUBLIC_API_URL ||
   expoExtra?.API_URL ||
   process.env.EXPO_PUBLIC_API_URL ||
-  process.env.VITE_API_URL ||
   process.env.API_URL;
 
 export const API_BASE_URL = normalizeApiBaseUrl(
   environmentApiUrl || getDefaultApiBaseUrl(),
 );
-
-console.log("Resolved environmentApiUrl:", environmentApiUrl);
-console.log("Resolved API_BASE_URL:", API_BASE_URL);
-
-// Diagnostic: log resolved API base for debugging on device
-console.log("Resolved API_BASE_URL:", API_BASE_URL);
-
-// ---------------------------------------------------------------------------
-// Error
-
-//these are here not permanent, but to help with debugging the push token registration and removal process.
-export const removePushToken = async (
-  authToken: string,
-  pushToken: string,
-): Promise<void> => {
-  try {
-    await fetch(
-      `${API_BASE_URL}/push-tokens/${encodeURIComponent(pushToken)}`,
-      {
-        method: "DELETE",
-        headers: { Authorization: `Bearer ${authToken}` },
-      },
-    );
-  } catch (error) {
-    console.error("Failed to remove push token:", error);
-  }
-};
-export const savePushToken = async (
-  token: string,
-  pushToken: string,
-): Promise<void> => {
-  try {
-    await fetch(`${API_BASE_URL}/push-tokens`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ token, pushToken }),
-    });
-  } catch (error) {
-    console.error("Failed to save push token:", error);
-  }
-};
 
 export class ApiError extends Error {
   status: number;
@@ -109,15 +68,6 @@ export class ApiError extends Error {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
-
-export interface LoginPayload {
-  email: string;
-  password: string;
-}
-
 export interface Pagination {
   page: number;
   pages: number;
@@ -125,15 +75,16 @@ export interface Pagination {
   hasPrev: boolean;
   hasNext: boolean;
   limit?: number;
-  perPage?: number;
-  per_page?: number;
-  pageSize?: number;
-  page_size?: number;
   [key: string]: unknown;
 }
 
 export interface Incident {
-  id: string | number;
+  incident_id?: string | number;
+  id?: string | number;
+  latitude?: string | number;
+  longitude?: string | number;
+  status?: string;
+  created_at?: string;
   [key: string]: unknown;
 }
 
@@ -143,7 +94,11 @@ export interface IncidentsResponse {
 }
 
 export interface Notification {
-  id: string | number;
+  id?: string | number;
+  notification_id?: string | number;
+  message?: string;
+  read?: boolean;
+  created_at?: string;
   [key: string]: unknown;
 }
 
@@ -152,35 +107,51 @@ export interface UnreadNotificationsResponse {
   notifications: Notification[];
 }
 
-export interface HeatmapFeature {
-  [key: string]: unknown;
-}
-
-export interface HeatmapMetadata {
-  [key: string]: unknown;
-}
-
-export interface HeatmapData {
-  type?: string;
-  features: HeatmapFeature[];
-  metadata?: HeatmapMetadata;
-  [key: string]: unknown;
-}
-
-export interface OSRMRoute {
-  [key: string]: unknown;
-}
-
 export interface CurrentUser {
   id?: string | number;
+  user_id?: string | number;
   name: string;
   email?: string;
   [key: string]: unknown;
 }
 
-// ---------------------------------------------------------------------------
-// Internal helpers
-// ---------------------------------------------------------------------------
+export type RiskRank = "Low Risk" | "Moderate Risk" | "Critical Risk";
+
+export interface LocalCrimePoint {
+  latitude: number;
+  longitude: number;
+  count: number;
+  incidentIds: Array<string | number>;
+}
+
+export interface LocalCrimeCellCount {
+  h3Index: string;
+  count: number;
+}
+
+export interface MobileCrimeAnalytics {
+  type: "mobile-crime-analytics";
+  h3Index: string;
+  resolution: number;
+  searchedCells: string[];
+  totalIncidentCount: number;
+  riskRank: RiskRank;
+  localCrimePoints: LocalCrimePoint[];
+  cellCounts: LocalCrimeCellCount[];
+}
+
+type MobileAnalyticsAck =
+  | {
+      success: true;
+      data: MobileCrimeAnalytics;
+    }
+  | {
+      success: false;
+      error?: {
+        message?: string;
+        statusCode?: number;
+      };
+    };
 
 async function parseResponse(response: Response): Promise<unknown> {
   const text = await response.text();
@@ -193,10 +164,13 @@ async function parseResponse(response: Response): Promise<unknown> {
   }
 
   if (!response.ok) {
+    const payload = data as Record<string, unknown>;
     const message =
-      (data as Record<string, string>)?.message ||
+      (typeof payload?.message === "string" && payload.message) ||
+      (typeof payload?.error === "string" && payload.error) ||
       response.statusText ||
       "API request failed";
+
     throw new ApiError(message, response.status, data);
   }
 
@@ -211,7 +185,7 @@ function buildHeaders(token: string | null, json = true): HeadersInit {
   }
 
   if (token) {
-    headers["Authorization"] = `Bearer ${token}`;
+    headers.Authorization = `Bearer ${token}`;
   }
 
   return headers;
@@ -227,7 +201,7 @@ async function request(
     const response = await fetch(url, options);
     return parseResponse(response);
   } catch (error) {
-    console.error("API network request failed:", {
+    console.error("API request failed:", {
       url,
       message: error instanceof Error ? error.message : String(error),
     });
@@ -243,45 +217,17 @@ function normalizePagination(
     return null;
   }
 
-  const page = Number(
-    pagination.page ??
-      pagination.currentPage ??
-      pagination.current_page ??
-      pagination.pageNumber ??
-      1,
-  );
-  const pages = Number(
-    pagination.pages ??
-      pagination.totalPages ??
-      pagination.total_pages ??
-      pagination.pageCount ??
-      1,
-  );
-  const total = Number(
-    pagination.total ??
-      pagination.totalItems ??
-      pagination.total_items ??
-      pagination.count ??
-      incidentCount,
-  );
+  const page = Number(pagination.page ?? 1);
+  const pages = Number(pagination.pages ?? pagination.totalPages ?? 1);
+  const total = Number(pagination.total ?? pagination.count ?? incidentCount);
 
   return {
     ...pagination,
     page,
     pages,
     total,
-    hasPrev: Boolean(
-      pagination.hasPrev ??
-      pagination.hasPreviousPage ??
-      pagination.has_previous_page ??
-      page > 1,
-    ),
-    hasNext: Boolean(
-      pagination.hasNext ??
-      pagination.hasNextPage ??
-      pagination.has_next_page ??
-      page < pages,
-    ),
+    hasPrev: Boolean(pagination.hasPrev ?? page > 1),
+    hasNext: Boolean(pagination.hasNext ?? page < pages),
   };
 }
 
@@ -317,7 +263,10 @@ function normalizeIncidentsResponse(response: unknown): IncidentsResponse {
       normalizedIncidents.length,
     );
 
-  return { incidents: normalizedIncidents, pagination };
+  return {
+    incidents: normalizedIncidents,
+    pagination,
+  };
 }
 
 function pickString(...values: unknown[]): string | undefined {
@@ -337,7 +286,6 @@ function normalizeCurrentUser(response: unknown): CurrentUser {
   const nested =
     (payload.user as Record<string, unknown> | undefined) ||
     (payload.profile as Record<string, unknown> | undefined) ||
-    (payload.personnel as Record<string, unknown> | undefined) ||
     (payload.data as Record<string, unknown> | undefined) ||
     payload;
 
@@ -347,6 +295,7 @@ function normalizeCurrentUser(response: unknown): CurrentUser {
     nested.givenName,
     nested.given_name,
   );
+
   const lastName = pickString(
     nested.lastName,
     nested.last_name,
@@ -354,6 +303,7 @@ function normalizeCurrentUser(response: unknown): CurrentUser {
     nested.familyName,
     nested.family_name,
   );
+
   const fullName = pickString(
     nested.name,
     nested.fullName,
@@ -371,149 +321,51 @@ function normalizeCurrentUser(response: unknown): CurrentUser {
       | string
       | number
       | undefined,
+    user_id: nested.user_id as string | number | undefined,
     name: fullName,
     email: pickString(nested.email, nested.emailAddress, nested.email_address),
   };
 }
 
-// ---------------------------------------------------------------------------
-// Public API
-// ---------------------------------------------------------------------------
-
-export async function loginPersonnel(payload: LoginPayload): Promise<unknown> {
-  const body = JSON.stringify(payload);
-  console.log("Payload being sent:", payload);
-  console.log("Stringified body:", body);
-
-  return request("/police/login", {
-    method: "POST",
-    headers: buildHeaders(null, true),
-    body,
-  });
-}
-
 export async function fetchCurrentUser(token: string): Promise<CurrentUser> {
-  const paths = ["/users/me", "/auth/me", "/me", "/profile", "/police/me"];
-  let lastError: unknown;
+  const response = await request("/users/me", {
+    method: "GET",
+    headers: buildHeaders(token, false),
+  });
 
-  for (const path of paths) {
-    try {
-      const response = await request(path, {
-        method: "GET",
-        headers: buildHeaders(token, false),
-      });
-
-      return normalizeCurrentUser(response);
-    } catch (error) {
-      if ((error as ApiError).status !== 404) {
-        throw error;
-      }
-
-      lastError = error;
-    }
-  }
-
-  throw lastError instanceof Error
-    ? lastError
-    : new Error("User profile endpoint was not found");
+  return normalizeCurrentUser(response);
 }
 
-export async function fetchIncidents(
+export async function fetchMyIncidents(
   token: string,
   page?: number,
   limit?: number,
 ): Promise<IncidentsResponse> {
-  console.log(
-    "fetchIncidents called with token:",
-    token ? "present" : "missing",
-  );
-  const headers = buildHeaders(token, false);
-  console.log("fetchIncidents headers:", headers);
+  const query =
+    page && limit
+      ? `?page=${encodeURIComponent(page)}&limit=${encodeURIComponent(limit)}`
+      : "";
 
-  try {
-    const query =
-      page && limit
-        ? `?page=${encodeURIComponent(page)}&limit=${encodeURIComponent(limit)}`
-        : "";
-
-    const response = await request(`/incidents${query}`, {
-      method: "GET",
-      headers,
-    });
-    return normalizeIncidentsResponse(response);
-  } catch (err) {
-    const apiErr = err as ApiError;
-    console.error(
-      "fetchIncidents error:",
-      apiErr.status,
-      apiErr.message,
-      apiErr.payload,
-    );
-    throw err;
-  }
-}
-
-export async function fetchAllIncidents(token: string): Promise<Incident[]> {
-  try {
-    const response = await request("/incidents/all", {
-      method: "GET",
-      headers: buildHeaders(token, false),
-    });
-
-    return normalizeIncidentsResponse(response).incidents;
-  } catch (err) {
-    if ((err as ApiError).status !== 404) {
-      throw err;
-    }
-  }
-
-  const firstPage = await fetchIncidents(token);
-  const incidents: Incident[] = [...firstPage.incidents];
-  const pagination = firstPage.pagination;
-
-  if (!pagination?.pages || pagination.pages <= 1) {
-    return incidents;
-  }
-
-  const limit =
-    pagination.limit ||
-    pagination.perPage ||
-    pagination.per_page ||
-    pagination.pageSize ||
-    pagination.page_size ||
-    firstPage.incidents.length ||
-    10;
-
-  const remainingPages = Array.from(
-    { length: pagination.pages - pagination.page },
-    (_, index) => pagination.page + index + 1,
-  );
-
-  const responses = await Promise.all(
-    remainingPages.map((page) => fetchIncidents(token, page, Number(limit))),
-  );
-
-  responses.forEach((response) => {
-    incidents.push(...response.incidents);
+  const response = await request(`/incidents/my${query}`, {
+    method: "GET",
+    headers: buildHeaders(token, false),
   });
 
-  return incidents;
+  return normalizeIncidentsResponse(response);
 }
 
-export async function updateIncidentStatus(
+export async function fetchMyIncidentById(
   token: string,
   incidentId: string | number,
-  status: string,
-): Promise<unknown> {
+): Promise<Incident> {
   if (!incidentId) {
-    throw new Error("Missing incident ID for status update.");
+    throw new Error("Missing incident ID.");
   }
 
-  return request(`/incidents/${encodeURIComponent(incidentId)}/status`, {
-    method: "PUT",
-    headers: buildHeaders(token, true),
-    body: JSON.stringify({ status }),
-  });
+  return request(`/incidents/my/${encodeURIComponent(incidentId)}`, {
+    method: "GET",
+    headers: buildHeaders(token, false),
+  }) as Promise<Incident>;
 }
 
 export async function fetchNotificationsCount(token: string): Promise<number> {
@@ -535,7 +387,7 @@ export async function fetchNotificationsCount(token: string): Promise<number> {
   if (typeof d.count === "number") return d.count;
   if (typeof d.unreadCount === "number") return d.unreadCount;
   if (Array.isArray(d.notifications)) return d.notifications.length;
-  if (Array.isArray(d.data)) return (d.data as unknown[]).length;
+  if (Array.isArray(d.data)) return d.data.length;
 
   return 0;
 }
@@ -549,24 +401,30 @@ export async function fetchUnreadNotifications(
   });
 
   if (Array.isArray(data)) {
-    return { count: data.length, notifications: data as Notification[] };
+    return {
+      count: data.length,
+      notifications: data as Notification[],
+    };
   }
 
   if (!data || typeof data !== "object") {
-    return { count: 0, notifications: [] };
+    return {
+      count: 0,
+      notifications: [],
+    };
   }
 
   const d = data as Record<string, unknown>;
-  const dd = d.data as Record<string, unknown> | undefined;
+  const nestedData = d.data as Record<string, unknown> | undefined;
 
   const notifications =
-    d.notifications || dd?.notifications || d.data || d.results || [];
+    d.notifications || nestedData?.notifications || d.data || d.results || [];
 
   const count =
     d.count ||
     d.unreadCount ||
-    dd?.count ||
-    dd?.unreadCount ||
+    nestedData?.count ||
+    nestedData?.unreadCount ||
     (Array.isArray(notifications) ? notifications.length : 0);
 
   return {
@@ -582,7 +440,7 @@ export async function markNotificationAsRead(
   notificationId: string | number,
 ): Promise<unknown> {
   if (!notificationId) {
-    throw new Error("Missing notification ID for marking as read.");
+    throw new Error("Missing notification ID.");
   }
 
   return request(`/notifications/${encodeURIComponent(notificationId)}/read`, {
@@ -591,135 +449,129 @@ export async function markNotificationAsRead(
   });
 }
 
-/**
- * Fetch all heatmap data.
- */
-export async function fetchHeatmapPoints(token: string): Promise<HeatmapData> {
-  const data = await request("/heatmap", {
-    method: "GET",
-    headers: buildHeaders(token, false),
-  });
-
-  const d = data as Record<string, unknown>;
-
-  if (d?.type === "heatmap" && d?.features) {
-    return d as HeatmapData;
-  }
-
-  return (
-    (d?.heatmap as HeatmapData) ||
-    (d as HeatmapData) || { features: [], metadata: {} }
-  );
-}
-
-/**
- * Fetch heatmap data for a specific month (YYYY-MM).
- */
-export async function fetchHeatmapByMonth(
-  token: string,
-  month: string,
-): Promise<HeatmapData> {
-  if (!month || !/^\d{4}-\d{2}$/.test(month)) {
-    throw new Error("Invalid month format. Use YYYY-MM");
-  }
-
-  const query = `?month=${encodeURIComponent(month)}`;
-  const data = await request(`/heatmap/month${query}`, {
-    method: "GET",
-    headers: buildHeaders(token, false),
-  });
-
-  const d = data as Record<string, unknown>;
-
-  if (d?.type === "heatmap" && d?.features) {
-    return d as HeatmapData;
-  }
-
-  return (
-    (d?.heatmap as HeatmapData) ||
-    (d as HeatmapData) || { features: [], metadata: {} }
-  );
-}
-
-/**
- * Fetch an OSRM route between two coordinates.
- *
- * NOTE: The original source had a truncated/broken function signature and
- * unreachable code after `throw`. This has been reconstructed to a working
- * state — verify the endpoint URL and parameter names against your backend.
- */
-export async function fetchOSRMRoute(
-  token: string,
-  startLng: number,
-  startLat: number,
-  endLng: number,
-  endLat: number,
-): Promise<OSRMRoute> {
-  const url = `${API_BASE_URL}/route?startLng=${startLng}&startLat=${startLat}&endLng=${endLng}&endLat=${endLat}`;
-
-  const response = await fetch(url, {
-    method: "GET",
-    headers: buildHeaders(token, false) as HeadersInit,
-  });
-
-  console.log("OSRM response status:", response.status);
-
-  if (!response.ok) {
-    console.error("OSRM request failed:", {
-      status: response.status,
-      statusText: response.statusText,
-      url: response.url,
+export async function savePushToken(
+  authToken: string,
+  pushToken: string,
+): Promise<void> {
+  try {
+    await request("/push-tokens", {
+      method: "POST",
+      headers: buildHeaders(authToken, true),
+      body: JSON.stringify({ token: pushToken }),
     });
-    throw new Error(`OSRM request failed with status ${response.status}`);
+  } catch (error) {
+    console.error("Failed to save push token:", error);
   }
-
-  return response.json() as Promise<OSRMRoute>;
 }
 
-/**
- * Fetch heatmap data for a date range (YYYY-MM-DD).
- */
-export async function fetchHeatmapByDateRange(
-  token: string,
-  startDate: string,
-  endDate: string,
-): Promise<HeatmapData> {
-  if (!startDate || !endDate) {
-    throw new Error("startDate and endDate are required (YYYY-MM-DD format)");
+export async function removePushToken(
+  authToken: string,
+  pushToken: string,
+): Promise<void> {
+  try {
+    await request(`/push-tokens/${encodeURIComponent(pushToken)}`, {
+      method: "DELETE",
+      headers: buildHeaders(authToken, false),
+    });
+  } catch (error) {
+    console.error("Failed to remove push token:", error);
   }
+}
 
-  const query = `?startDate=${encodeURIComponent(startDate)}&endDate=${encodeURIComponent(endDate)}`;
-  const data = await request(`/heatmap/range${query}`, {
-    method: "GET",
-    headers: buildHeaders(token, false),
+export function createMobileSocket(token: string): Socket {
+  return io(API_BASE_URL, {
+    transports: ["websocket"],
+    autoConnect: false,
+    auth: {
+      token,
+    },
   });
+}
 
-  const d = data as Record<string, unknown>;
+export function getH3IndexForLocation(
+  latitude: number,
+  longitude: number,
+): string {
+  // Require h3-js at runtime to avoid triggering its TextDecoder usage during module
+  // initialization. This prevents startup crashes in Metro/Expo environments where
+  // utf-16le may not be available until our shim runs.
+  // eslint-disable-next-line @typescript-eslint/no-var-requires, @typescript-eslint/no-unsafe-member-access
+  const { latLngToCell } = require("h3-js");
 
-  if (d?.type === "heatmap" && d?.features) {
-    return d as HeatmapData;
-  }
+  return latLngToCell(latitude, longitude, MOBILE_H3_RESOLUTION);
+}
 
-  return (
-    (d?.heatmap as HeatmapData) ||
-    (d as HeatmapData) || { features: [], metadata: {} }
-  );
+export function requestMobileCrimeAnalytics(
+  socket: Socket,
+  latitude: number,
+  longitude: number,
+): Promise<MobileCrimeAnalytics> {
+  const h3Index = getH3IndexForLocation(latitude, longitude);
+
+  return requestMobileCrimeAnalyticsByH3Index(socket, h3Index);
+}
+
+export function requestMobileCrimeAnalyticsByH3Index(
+  socket: Socket,
+  h3Index: string,
+): Promise<MobileCrimeAnalytics> {
+  return new Promise((resolve, reject) => {
+    socket.emit(
+      "mobile:crime-analytics:request",
+      { h3Index },
+      (response: MobileAnalyticsAck) => {
+        if (!response?.success) {
+          reject(
+            new Error(
+              response?.error?.message ||
+                "Mobile crime analytics request failed",
+            ),
+          );
+          return;
+        }
+
+        resolve(response.data);
+      },
+    );
+  });
+}
+
+export function subscribeToMobileCrimeAnalytics(
+  socket: Socket,
+  onUpdate: (analytics: MobileCrimeAnalytics) => void,
+): () => void {
+  socket.on("mobile:crime-analytics:update", onUpdate);
+
+  return () => {
+    socket.off("mobile:crime-analytics:update", onUpdate);
+  };
+}
+
+export function subscribeToMobileCrimeAnalyticsErrors(
+  socket: Socket,
+  onError: (error: { message: string; statusCode?: number }) => void,
+): () => void {
+  socket.on("mobile:crime-analytics:error", onError);
+
+  return () => {
+    socket.off("mobile:crime-analytics:error", onError);
+  };
 }
 
 export default {
   API_BASE_URL,
-  loginPersonnel,
   fetchCurrentUser,
-  fetchIncidents,
-  fetchAllIncidents,
-  updateIncidentStatus,
+  fetchMyIncidents,
+  fetchMyIncidentById,
   fetchNotificationsCount,
   fetchUnreadNotifications,
   markNotificationAsRead,
-  fetchHeatmapPoints,
-  fetchHeatmapByMonth,
-  fetchHeatmapByDateRange,
-  fetchOSRMRoute,
-  removePushToken,
   savePushToken,
+  removePushToken,
+  createMobileSocket,
+  getH3IndexForLocation,
+  requestMobileCrimeAnalytics,
+  requestMobileCrimeAnalyticsByH3Index,
+  subscribeToMobileCrimeAnalytics,
+  subscribeToMobileCrimeAnalyticsErrors,
 };

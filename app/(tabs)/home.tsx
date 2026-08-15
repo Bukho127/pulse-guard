@@ -2,30 +2,27 @@ import { useAuth } from "@/context/AuthContext";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import { useRouter } from "expo-router";
-import { Fragment, useCallback, useState } from "react";
+import { Fragment, useCallback, useMemo, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import { fetchIncidents, type Incident } from "@/api";
+import {
+  createMobileSocket,
+  fetchMyIncidents,
+  requestMobileCrimeAnalytics,
+  subscribeToMobileCrimeAnalytics,
+  subscribeToMobileCrimeAnalyticsErrors,
+  type Incident,
+  type LocalCrimePoint,
+  type MobileCrimeAnalytics,
+} from "@/api";
 import { HomeHeader } from "@/components/home/home-header";
 import { ThemedText } from "@/components/themed-text";
-import {
-  DUMMY_HEATMAP_INCIDENTS,
-  getVisibleHeatmapIncidents,
-} from "@/constants/heatmap-data";
+import type { HeatmapIncidentPoint } from "@/constants/heatmap-data";
+import { requestLocationPermission } from "@/services/location";
 import { HeatmapMap } from "../../components/maps/heatmap-map";
 
-const visibleHeatmapIncidents = getVisibleHeatmapIncidents(
-  DUMMY_HEATMAP_INCIDENTS,
-);
-const totalReportedIncidents = DUMMY_HEATMAP_INCIDENTS.reduce(
-  (total, incident) => total + incident.reportedCases,
-  0,
-);
-const highestReportedCases = Math.max(
-  ...DUMMY_HEATMAP_INCIDENTS.map((incident) => incident.reportedCases),
-);
-const riskLabel = highestReportedCases >= 12 ? "Medium risk" : "Low risk";
+const MOBILE_ANALYTICS_REFRESH_MS = 2 * 60 * 60 * 1000;
 
 type ReportProgressState = "idle" | "sent" | "acknowledged";
 type StepState = "complete" | "pending";
@@ -95,6 +92,29 @@ function formatUploadedTime(incident: Incident | null): string | null {
     minute: "2-digit",
     hour12: true,
   }).format(new Date(timestamp));
+}
+
+function getHeatmapPointId(point: LocalCrimePoint, index: number): string {
+  const firstIncidentId = point.incidentIds[0];
+
+  return firstIncidentId
+    ? `local-crime-${firstIncidentId}`
+    : `local-crime-${point.latitude}-${point.longitude}-${index}`;
+}
+
+function toHeatmapIncidents(
+  analytics: MobileCrimeAnalytics | null,
+): HeatmapIncidentPoint[] {
+  if (!analytics) {
+    return [];
+  }
+
+  return analytics.localCrimePoints.map((point, index) => ({
+    id: getHeatmapPointId(point, index),
+    latitude: point.latitude,
+    longitude: point.longitude,
+    reportedCases: point.count,
+  }));
 }
 
 function IncidentStatusStepper({
@@ -175,6 +195,13 @@ export default function HomeScreen() {
   const { token } = useAuth();
   const [latestIncident, setLatestIncident] = useState<Incident | null>(null);
   const [isLoadingReportStatus, setIsLoadingReportStatus] = useState(false);
+  const [mobileAnalytics, setMobileAnalytics] =
+    useState<MobileCrimeAnalytics | null>(null);
+  const [heatmapIncidents, setHeatmapIncidents] = useState<
+    HeatmapIncidentPoint[]
+  >([]);
+  const [isLoadingHeatmap, setIsLoadingHeatmap] = useState(false);
+  const [heatmapError, setHeatmapError] = useState<string | null>(null);
 
   useFocusEffect(
     useCallback(() => {
@@ -192,7 +219,7 @@ export default function HomeScreen() {
         }
 
         try {
-          const response = await fetchIncidents(token, 1, 10);
+          const response = await fetchMyIncidents(token, 1, 10);
 
           if (isActive) {
             setLatestIncident(getLatestIncident(response.incidents) ?? null);
@@ -215,6 +242,129 @@ export default function HomeScreen() {
       };
     }, [token]),
   );
+
+  useFocusEffect(
+    useCallback(() => {
+      let isActive = true;
+      let refreshInterval: ReturnType<typeof setInterval> | null = null;
+
+      if (!token) {
+        setMobileAnalytics(null);
+        setHeatmapIncidents([]);
+        setHeatmapError(null);
+        setIsLoadingHeatmap(false);
+
+        return () => {
+          isActive = false;
+        };
+      }
+
+      const socket = createMobileSocket(token);
+
+      function applyAnalytics(analytics: MobileCrimeAnalytics) {
+        if (!isActive) {
+          return;
+        }
+
+        setMobileAnalytics(analytics);
+        setHeatmapIncidents(toHeatmapIncidents(analytics));
+        setHeatmapError(null);
+        setIsLoadingHeatmap(false);
+      }
+
+      async function requestAnalyticsForCurrentLocation() {
+        setIsLoadingHeatmap(true);
+
+        try {
+          const result = await requestLocationPermission();
+
+          if (!isActive) {
+            return;
+          }
+
+          if (result.status !== "granted") {
+            setHeatmapError(
+              result.status === "services_disabled"
+                ? "Turn on location services to load local crime data."
+                : "Allow location access to load local crime data.",
+            );
+            setIsLoadingHeatmap(false);
+            return;
+          }
+
+          const analytics = await requestMobileCrimeAnalytics(
+            socket,
+            result.location.coords.latitude,
+            result.location.coords.longitude,
+          );
+
+          applyAnalytics(analytics);
+        } catch (error) {
+          if (!isActive) {
+            return;
+          }
+
+          setHeatmapError(
+            error instanceof Error
+              ? error.message
+              : "Couldn't load local crime data.",
+          );
+          setIsLoadingHeatmap(false);
+        }
+      }
+
+      const unsubscribeAnalytics = subscribeToMobileCrimeAnalytics(
+        socket,
+        applyAnalytics,
+      );
+      const unsubscribeErrors = subscribeToMobileCrimeAnalyticsErrors(
+        socket,
+        (error) => {
+          if (isActive) {
+            setHeatmapError(error.message);
+            setIsLoadingHeatmap(false);
+          }
+        },
+      );
+
+      socket.on("connect", requestAnalyticsForCurrentLocation);
+      socket.connect();
+      refreshInterval = setInterval(
+        requestAnalyticsForCurrentLocation,
+        MOBILE_ANALYTICS_REFRESH_MS,
+      );
+
+      return () => {
+        isActive = false;
+        if (refreshInterval) {
+          clearInterval(refreshInterval);
+        }
+        socket.off("connect", requestAnalyticsForCurrentLocation);
+        unsubscribeAnalytics();
+        unsubscribeErrors();
+        socket.disconnect();
+      };
+    }, [token]),
+  );
+
+  const { totalReportedIncidents, highestReportedCases, riskLabel } =
+    useMemo(() => {
+      if (!mobileAnalytics) {
+        return {
+          totalReportedIncidents: 0,
+          highestReportedCases: 0,
+          riskLabel: "Low Risk",
+        };
+      }
+
+      const counts = heatmapIncidents.map((incident) => incident.reportedCases);
+
+      return {
+        totalReportedIncidents: mobileAnalytics.totalIncidentCount,
+        highestReportedCases: counts.length > 0 ? Math.max(...counts) : 0,
+        riskLabel: mobileAnalytics.riskRank,
+      };
+    }, [heatmapIncidents, mobileAnalytics]);
 
   const reportProgressState = getReportProgressState(latestIncident);
   const isReportSent =
@@ -250,19 +400,19 @@ export default function HomeScreen() {
             <View style={styles.metricGrid}>
               <View style={styles.metricItem}>
                 <ThemedText style={styles.metricValue}>
-                  {totalReportedIncidents}
+                  {isLoadingHeatmap ? "-" : totalReportedIncidents}
                 </ThemedText>
                 <ThemedText style={styles.metricLabel}>reports</ThemedText>
               </View>
               <View style={styles.metricItem}>
                 <ThemedText style={styles.metricValue}>
-                  {visibleHeatmapIncidents.length}
+                  {isLoadingHeatmap ? "-" : heatmapIncidents.length}
                 </ThemedText>
                 <ThemedText style={styles.metricLabel}>hotspots</ThemedText>
               </View>
               <View style={styles.metricItem}>
                 <ThemedText style={styles.metricValue}>
-                  {highestReportedCases}
+                  {isLoadingHeatmap ? "-" : highestReportedCases}
                 </ThemedText>
                 <ThemedText style={styles.metricLabel}>highest area</ThemedText>
               </View>
@@ -276,7 +426,8 @@ export default function HomeScreen() {
                   Live hotspot map
                 </ThemedText>
                 <ThemedText style={styles.sectionCopy}>
-                  Reports with more than 5 cases appear here.
+                  {heatmapError ??
+                    "Local reports update automatically from your live location."}
                 </ThemedText>
               </View>
 
@@ -297,9 +448,8 @@ export default function HomeScreen() {
 
             <View style={styles.mapPreview}>
               <HeatmapMap
-                incidents={visibleHeatmapIncidents}
+                incidents={heatmapIncidents}
                 interactive
-                showRoute
                 showLocationStatus={false}
                 showUserLocation={false}
                 zoomLevel={11.3}

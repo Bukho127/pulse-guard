@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import { useFocusEffect } from "@react-navigation/native";
 import * as Location from "expo-location";
 import { Href, useRouter } from "expo-router";
 import {
@@ -20,7 +21,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { fetchCurrentUser } from "@/api";
+import { fetchCurrentUser, fetchNotificationsCount } from "@/api";
 import NotificationIcon from "@/assets/icons/notification-icon.svg";
 import { ThemedText } from "@/components/themed-text";
 import { PRIVACY_POLICY_URL, TERMS_OF_USE_URL } from "@/constants/legal-links";
@@ -106,6 +107,7 @@ export function HomeHeader() {
   const { width } = useWindowDimensions();
   const { token, logout } = useAuth();
   const { notification } = useNotification();
+  const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
   const [locationLabel, setLocationLabel] = useState(FALLBACK_LOCATION);
   const [userName, setUserName] = useState(FALLBACK_USER_NAME);
   const [userEmail, setUserEmail] = useState(FALLBACK_USER_EMAIL);
@@ -169,6 +171,30 @@ export function HomeHeader() {
       isActive = false;
     };
   }, [token]);
+
+  const loadUnreadNotificationCount = useCallback(async () => {
+    if (!token) {
+      setUnreadNotificationCount(0);
+      return;
+    }
+
+    try {
+      const count = await fetchNotificationsCount(token);
+      setUnreadNotificationCount(count);
+    } catch {
+      setUnreadNotificationCount(0);
+    }
+  }, [token]);
+
+  useFocusEffect(
+    useCallback(() => {
+      void loadUnreadNotificationCount();
+    }, [loadUnreadNotificationCount]),
+  );
+
+  useEffect(() => {
+    void loadUnreadNotificationCount();
+  }, [loadUnreadNotificationCount, notification]);
 
   useEffect(() => {
     if (!isProfileDrawerVisible) {
@@ -262,7 +288,17 @@ export function HomeHeader() {
         ]}
       >
         <NotificationIcon width={24} height={24} />
-        {notification ? <View style={styles.notificationDot} /> : null}
+        {unreadNotificationCount > 0 ? (
+          <View style={styles.notificationBadge}>
+            <ThemedText
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              style={styles.notificationBadgeText}
+            >
+              {unreadNotificationCount > 99 ? "99+" : unreadNotificationCount}
+            </ThemedText>
+          </View>
+        ) : null}
       </Pressable>
 
       <Modal
@@ -486,14 +522,23 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     position: "relative",
   },
-  notificationDot: {
+  notificationBadge: {
     position: "absolute",
-    top: 10,
-    right: 10,
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+    top: 4,
+    right: 4,
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 4,
     backgroundColor: "#E3322B",
+  },
+  notificationBadgeText: {
+    color: "#FFFFFF",
+    fontSize: 10,
+    lineHeight: 13,
+    fontFamily: "Geist_500Medium",
   },
   drawerOverlay: {
     flex: 1,

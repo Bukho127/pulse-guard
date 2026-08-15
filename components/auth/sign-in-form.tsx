@@ -1,3 +1,8 @@
+import {
+  GoogleSignin,
+  isErrorWithCode,
+  statusCodes,
+} from "@react-native-google-signin/google-signin";
 import { router } from "expo-router";
 import { useState } from "react";
 
@@ -6,14 +11,34 @@ import { useAuth } from "@/context/AuthContext";
 import { DEBUG_AUTH_BYPASS } from "@/services/auth";
 
 export function SignInForm() {
-  const { login } = useAuth();
+  const { login, loginWithGoogle } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
+  const handleGooglePress = async () => {
+    try {
+      await GoogleSignin.hasPlayServices();
+      const userInfo = await GoogleSignin.signIn();
+      console.log("Google signIn result:", JSON.stringify(userInfo, null, 2));
+
+      const idToken = (userInfo as any)?.data?.idToken as string | undefined;
+
+      if (!idToken) {
+        throw new Error("No ID token returned from Google");
+      }
+
+      await loginWithGoogle(idToken);
+      router.replace("/(tabs)/home");
+    } catch (err: any) {
+      console.log("Google sign-in error:", err);
+      if (isErrorWithCode(err) && err.code === statusCodes.SIGN_IN_CANCELLED) {
+        return;
+      }
+    }
+  };
+
   const handleSubmit = async () => {
     if (!DEBUG_AUTH_BYPASS && (!email.trim() || !password)) {
-      // basic client-side validation
-      // use dynamic import to avoid adding Alert to top scope
       const { Alert } = await import("react-native");
       Alert.alert("Validation", "Email and password are required");
       return;
@@ -28,11 +53,12 @@ export function SignInForm() {
       title="Welcome Back"
       subtitle="Sign in to continue"
       actionLabel="Sign in"
-      actionPrompt="Don’t have an account?"
+      actionPrompt="Don't have an account?"
       actionLinkHref="/register"
       actionLinkLabel="Register"
       socialLabel="Continue with"
       onSubmit={handleSubmit}
+      onGooglePress={handleGooglePress}
       fields={
         <>
           <AuthField

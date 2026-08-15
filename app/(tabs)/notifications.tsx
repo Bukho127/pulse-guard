@@ -1,27 +1,26 @@
+import {
+  fetchUnreadNotifications,
+  markNotificationAsRead,
+  type Notification as ApiNotification,
+} from "@/api";
 import MyCustomIcon from "@/assets/icons/notification-empty-state-mobile.svg";
 import NotificationIcon from "@/assets/icons/notification-icon.svg";
 import { ThemedText } from "@/components/themed-text";
-import {
-  DUMMY_NOTIFICATIONS,
-  type NotificationItem,
-} from "@/constants/notification-data";
+import { useAuth } from "@/context/AuthContext";
 import { Ionicons } from "@expo/vector-icons";
+import { useFocusEffect } from "@react-navigation/native";
 import { useRouter } from "expo-router";
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import {
+  ActivityIndicator,
   FlatList,
   Pressable,
+  RefreshControl,
   SafeAreaView,
   StyleSheet,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-
-// TODO: extend NotificationItem (in constants/notification-data.ts) with:
-//   type: 'alert'  | 'system'
-//   isRead: boolean
-// The mapping below assumes these exist; adjust the union to match your
-// actual notification categories.
 
 const BRAND_GREEN = "#57BE47";
 
@@ -35,6 +34,16 @@ const DEFAULT_TYPE_ICON: keyof typeof Ionicons.glyphMap =
   "notifications-outline";
 
 type FilterKey = "all" | "alert" | "system";
+
+type NotificationItem = {
+  id: string;
+  title: string;
+  message: string;
+  date: string;
+  isRead: boolean;
+  type: Exclude<FilterKey, "all">;
+  raw: ApiNotification;
+};
 
 const FILTERS: { key: FilterKey; label: string }[] = [
   { key: "all", label: "All" },
@@ -81,28 +90,112 @@ function FilterTabs({
   );
 }
 
-function NotificationRow({ item }: { item: NotificationItem }) {
-  const typeIcon =
-    NOTIFICATION_TYPE_ICONS[(item as { type?: string }).type ?? ""] ??
-    DEFAULT_TYPE_ICON;
-  const isRead = (item as { isRead?: boolean }).isRead ?? false;
+function getStringValue(source: Record<string, unknown>, keys: string[]) {
+  for (const key of keys) {
+    const value = source[key];
+
+    if (typeof value === "string" && value.trim()) {
+      return value.trim();
+    }
+
+    if (typeof value === "number") {
+      return String(value);
+    }
+  }
+
+  return null;
+}
+
+function getNotificationType(
+  notification: ApiNotification,
+): NotificationItem["type"] {
+  const source = notification as Record<string, unknown>;
+  const rawType = getStringValue(source, [
+    "type",
+    "category",
+    "kind",
+  ])?.toLowerCase();
+
+  if (rawType === "alert" || rawType === "warning" || rawType === "incident") {
+    return "alert";
+  }
+
+  return "system";
+}
+
+function formatNotificationDate(notification: ApiNotification) {
+  const source = notification as Record<string, unknown>;
+  const rawDate = getStringValue(source, [
+    "created_at",
+    "createdAt",
+    "date",
+    "timestamp",
+  ]);
+
+  if (!rawDate) {
+    return "";
+  }
+
+  const timestamp = new Date(rawDate).getTime();
+
+  if (Number.isNaN(timestamp)) {
+    return rawDate;
+  }
+
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  }).format(new Date(timestamp));
+}
+
+function toNotificationItem(notification: ApiNotification): NotificationItem {
+  const source = notification as Record<string, unknown>;
+  const id =
+    getStringValue(source, ["id", "notification_id", "_id"]) ??
+    `${getStringValue(source, ["created_at", "createdAt", "timestamp"]) ?? "notification"}-${getStringValue(source, ["message", "body", "description"]) ?? "message"}`;
+  const message =
+    getStringValue(source, ["message", "body", "description", "text"]) ??
+    "You have a new notification.";
+
+  return {
+    id,
+    title:
+      getStringValue(source, ["title", "subject", "heading"]) ??
+      (getNotificationType(notification) === "alert"
+        ? "Safety alert"
+        : "Notification"),
+    message,
+    date: formatNotificationDate(notification),
+    isRead: Boolean(source.read ?? source.isRead ?? false),
+    type: getNotificationType(notification),
+    raw: notification,
+  };
+}
+
+function NotificationRow({
+  item,
+  onPress,
+}: {
+  item: NotificationItem;
+  onPress: (item: NotificationItem) => void;
+}) {
+  const typeIcon = NOTIFICATION_TYPE_ICONS[item.type] ?? DEFAULT_TYPE_ICON;
 
   return (
     <Pressable
-      accessibilityLabel={`${item.title}. ${isRead ? "Read" : "Unread"}`}
+      accessibilityLabel={`${item.title}. ${item.isRead ? "Read" : "Unread"}`}
       accessibilityRole="button"
-      onPress={() => {
-        // TODO: navigate to the relevant report/thread and mark as read
-      }}
+      onPress={() => onPress(item)}
       style={({ pressed }) => [
         styles.notificationRow,
-        !isRead && styles.notificationRowUnread,
+        !item.isRead && styles.notificationRowUnread,
         pressed && styles.pressed,
       ]}
     >
       <View style={styles.notificationIconShell}>
         <Ionicons name={typeIcon} size={20} color="#FFFFFF" />
-        {!isRead ? <View style={styles.unreadDot} /> : null}
+        {!item.isRead ? <View style={styles.unreadDot} /> : null}
       </View>
 
       <View style={styles.notificationContent}>
@@ -111,7 +204,7 @@ function NotificationRow({ item }: { item: NotificationItem }) {
             numberOfLines={1}
             style={[
               styles.notificationTitle,
-              !isRead && styles.notificationTitleUnread,
+              !item.isRead && styles.notificationTitleUnread,
             ]}
           >
             {item.title}
@@ -151,17 +244,84 @@ function EmptyState({ activeFilter }: { activeFilter: FilterKey }) {
 export default function NotificationsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { token } = useAuth();
   const [activeFilter, setActiveFilter] = useState<FilterKey>("all");
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const loadNotifications = useCallback(
+    async (refreshing = false) => {
+      if (!token) {
+        setNotifications([]);
+        setError("Sign in to view your notifications.");
+        return;
+      }
+
+      if (refreshing) {
+        setIsRefreshing(true);
+      } else {
+        setIsLoading(true);
+      }
+
+      try {
+        const response = await fetchUnreadNotifications(token);
+        setNotifications(response.notifications.map(toNotificationItem));
+        setError(null);
+      } catch (loadError) {
+        setError(
+          loadError instanceof Error
+            ? loadError.message
+            : "Unable to load notifications.",
+        );
+      } finally {
+        setIsLoading(false);
+        setIsRefreshing(false);
+      }
+    },
+    [token],
+  );
+
+  useFocusEffect(
+    useCallback(() => {
+      void loadNotifications();
+    }, [loadNotifications]),
+  );
 
   const filteredNotifications = useMemo(() => {
     if (activeFilter === "all") {
-      return DUMMY_NOTIFICATIONS;
+      return notifications;
     }
 
-    return DUMMY_NOTIFICATIONS.filter(
-      (item) => (item as { type?: string }).type === activeFilter,
+    return notifications.filter((item) => item.type === activeFilter);
+  }, [activeFilter, notifications]);
+
+  const handleNotificationPress = async (item: NotificationItem) => {
+    if (!token || item.isRead) {
+      return;
+    }
+
+    setNotifications((currentNotifications) =>
+      currentNotifications.map((notification) =>
+        notification.id === item.id
+          ? { ...notification, isRead: true }
+          : notification,
+      ),
     );
-  }, [activeFilter]);
+
+    try {
+      await markNotificationAsRead(token, item.id);
+    } catch {
+      setNotifications((currentNotifications) =>
+        currentNotifications.map((notification) =>
+          notification.id === item.id
+            ? { ...notification, isRead: false }
+            : notification,
+        ),
+      );
+    }
+  };
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -201,16 +361,54 @@ export default function NotificationsScreen() {
 
         <FilterTabs activeFilter={activeFilter} onSelect={setActiveFilter} />
 
-        <FlatList
-          style={styles.notificationListContainer}
-          contentContainerStyle={styles.notificationList}
-          data={filteredNotifications}
-          ItemSeparatorComponent={() => <View style={styles.separator} />}
-          ListEmptyComponent={<EmptyState activeFilter={activeFilter} />}
-          keyExtractor={(item) => item.id}
-          renderItem={({ item }) => <NotificationRow item={item} />}
-          showsVerticalScrollIndicator={false}
-        />
+        {isLoading ? (
+          <View style={styles.loadingState}>
+            <ActivityIndicator color={BRAND_GREEN} />
+            <ThemedText style={styles.loadingText}>
+              Loading notifications...
+            </ThemedText>
+          </View>
+        ) : (
+          <FlatList
+            style={styles.notificationListContainer}
+            contentContainerStyle={styles.notificationList}
+            data={filteredNotifications}
+            ItemSeparatorComponent={() => <View style={styles.separator} />}
+            ListEmptyComponent={
+              error ? (
+                <View style={styles.emptyState}>
+                  <ThemedText style={styles.emptyTitle}>{error}</ThemedText>
+                  <Pressable
+                    accessibilityRole="button"
+                    onPress={() => void loadNotifications()}
+                    style={({ pressed }) => [
+                      styles.retryButton,
+                      pressed && styles.pressed,
+                    ]}
+                  >
+                    <ThemedText style={styles.retryButtonText}>
+                      Retry
+                    </ThemedText>
+                  </Pressable>
+                </View>
+              ) : (
+                <EmptyState activeFilter={activeFilter} />
+              )
+            }
+            keyExtractor={(item) => item.id}
+            refreshControl={
+              <RefreshControl
+                onRefresh={() => void loadNotifications(true)}
+                refreshing={isRefreshing}
+                tintColor={BRAND_GREEN}
+              />
+            }
+            renderItem={({ item }) => (
+              <NotificationRow item={item} onPress={handleNotificationPress} />
+            )}
+            showsVerticalScrollIndicator={false}
+          />
+        )}
       </View>
     </SafeAreaView>
   );
@@ -297,6 +495,18 @@ const styles = StyleSheet.create({
   },
   separator: {
     height: 10,
+  },
+  loadingState: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+  },
+  loadingText: {
+    color: "#77777B",
+    fontSize: 13,
+    lineHeight: 18,
+    fontFamily: "Geist_400Regular",
   },
   notificationRow: {
     minHeight: 92,
@@ -398,6 +608,21 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     textAlign: "center",
     fontFamily: "Geist_400Regular",
+  },
+  retryButton: {
+    minWidth: 112,
+    height: 40,
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 14,
+    backgroundColor: "#202020",
+  },
+  retryButtonText: {
+    color: "#FFFFFF",
+    fontSize: 13,
+    lineHeight: 17,
+    fontFamily: "Geist_500Medium",
   },
   pressed: {
     opacity: 0.78,

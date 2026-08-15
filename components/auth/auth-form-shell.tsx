@@ -6,8 +6,15 @@ import { LinearGradient } from "expo-linear-gradient";
 import { Link, router } from "expo-router";
 import { type ReactNode } from "react";
 
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
-import { SafeAreaView } from 'react-native-safe-area-context';
+import {
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 type AuthFormShellProps = {
   title: string;
@@ -19,6 +26,10 @@ type AuthFormShellProps = {
   socialLabel: string;
   fields: ReactNode;
   onSubmit?: () => void;
+  onGooglePress?: () => void;
+  onFacebookPress?: () => void;
+  onApplePress?: () => void;
+  googleDisabled?: boolean;
 };
 
 type AuthFieldProps = {
@@ -51,6 +62,10 @@ export function AuthFormShell({
   socialLabel,
   fields,
   onSubmit,
+  onGooglePress,
+  onFacebookPress,
+  onApplePress,
+  googleDisabled,
 }: AuthFormShellProps) {
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -106,15 +121,37 @@ export function AuthFormShell({
             </View>
 
             <View style={styles.socialIcons}>
-              <Pressable accessibilityRole="button" style={styles.iconButton}>
+              <Pressable
+                accessibilityRole="button"
+                onPress={onGooglePress}
+                disabled={googleDisabled}
+                style={({ pressed }) => [
+                  styles.iconButton,
+                  pressed && styles.iconButtonPressed,
+                ]}
+              >
                 <GoogleLogo width={28} height={28} />
               </Pressable>
 
-              <Pressable accessibilityRole="button" style={styles.iconButton}>
+              <Pressable
+                accessibilityRole="button"
+                onPress={onFacebookPress}
+                style={({ pressed }) => [
+                  styles.iconButton,
+                  pressed && styles.iconButtonPressed,
+                ]}
+              >
                 <FacebookLogo width={28} height={28} />
               </Pressable>
 
-              <Pressable accessibilityRole="button" style={styles.iconButton}>
+              <Pressable
+                accessibilityRole="button"
+                onPress={onApplePress}
+                style={({ pressed }) => [
+                  styles.iconButton,
+                  pressed && styles.iconButtonPressed,
+                ]}
+              >
                 <AppleLogo width={28} height={28} />
               </Pressable>
             </View>
@@ -314,6 +351,9 @@ const styles = StyleSheet.create({
     height: 34,
     alignItems: "center",
     justifyContent: "center",
+  },
+  iconButtonPressed: {
+    opacity: 0.5,
   },
   footerRow: {
     flexDirection: "row",
