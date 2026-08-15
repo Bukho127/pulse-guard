@@ -141,7 +141,7 @@ function toHeatmapIncidents(
 
 // Builds the list of hotspots to geofence, sorted nearest-first, since
 // iOS caps simultaneously monitored regions at 20. This function
-// truncates to the nearest N internally. this will we help full when we have a large number of hotspots in the future, but for now it's just a precaution.
+// truncates to the nearest N internally. this will we help full when we have a large number of hotspots in the future.
 function buildGeofenceHotspots(
   analytics: MobileCrimeAnalytics,
   userCoords: { latitude: number; longitude: number },
