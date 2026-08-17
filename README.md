@@ -20,23 +20,23 @@ Pulse Guard is a mobile safety app designed to help users stay informed, report 
 
 ### Home
 
-![Pulse Guard home screen](https://raw.githubusercontent.com/Bukho127/pulse-guard/main/assets/screenshots/home-screen.png)
+![Pulse Guard home screen](assets/screenshots/home-screen.png)
 
 ### Onboarding
 
-![Pulse Guard onboarding screen](https://raw.githubusercontent.com/Bukho127/pulse-guard/main/assets/screenshots/onboarding-screen.png)
+![Pulse Guard onboarding screen](assets/screenshots/onboarding-screen.png)
 
 ### Video recording
 
-![Pulse Guard video screen](https://raw.githubusercontent.com/Bukho127/pulse-guard/main/assets/screenshots/video-screen.png)
+![Pulse Guard video screen](assets/screenshots/video-screen.png)
 
 ### Terms and policy
 
-![Pulse Guard terms screen](https://raw.githubusercontent.com/Bukho127/pulse-guard/main/assets/screenshots/terms-of-use.png)
+![Pulse Guard terms screen](assets/screenshots/terms-of-use.png)
 
 ### Notifications
 
-![Pulse Guard empty notification state](https://raw.githubusercontent.com/Bukho127/pulse-guard/main/assets/screenshots/empty-notification-state.png)
+![Pulse Guard empty notification state](assets/screenshots/empty-notification-state.png)
 
 ## Getting started
 
