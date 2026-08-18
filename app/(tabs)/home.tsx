@@ -39,7 +39,7 @@ interface IncidentStep {
   state: StepState;
 }
 
-// Rough distance in meters between two latitude/longitude points using the Haversine formula.
+// Rough distance in meters between two latitude/longitude points using the Haversine formula/ algorithm.
 function distanceMeters(
   lat1: number,
   lon1: number,
