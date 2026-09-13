@@ -55,6 +55,9 @@ const environmentApiUrl =
 export const API_BASE_URL = normalizeApiBaseUrl(
   environmentApiUrl || getDefaultApiBaseUrl(),
 );
+console.log("RAW ENV VAR:", process.env.EXPO_PUBLIC_API_URL);
+console.log("expoExtra.EXPO_PUBLIC_API_URL:", expoExtra?.EXPO_PUBLIC_API_URL);
+console.log("FINAL API_BASE_URL:", API_BASE_URL);
 
 export class ApiError extends Error {
   status: number;
