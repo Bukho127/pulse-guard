@@ -1,4 +1,5 @@
 import { ThemedText } from "@/components/themed-text";
+import { useToast } from "@/context/ToastContext";
 import { requestLocationPermission } from "@/services/location";
 import { uploadRecordedVideo } from "@/services/video-upload";
 import { Ionicons } from "@expo/vector-icons";
@@ -25,6 +26,7 @@ function formatDuration(seconds: number) {
 
 export function VideoRecorder({ onClose }: VideoRecorderProps) {
   const cameraRef = useRef<CameraView>(null);
+  const { showToast } = useToast();
   const isMountedRef = useRef(true);
   const isRecordingRef = useRef(false);
   const stopRequestedRef = useRef(false);
@@ -115,6 +117,11 @@ export function VideoRecorder({ onClose }: VideoRecorderProps) {
       }
 
       const video = await recordingPromise;
+      if (isMountedRef.current) {
+        setIsRecording(false);
+        setIsPressingRecord(false);
+      }
+
       setDebugStatus(
         video?.uri ? "Video saved" : "Recording stopped without video",
       );
@@ -144,13 +151,16 @@ export function VideoRecorder({ onClose }: VideoRecorderProps) {
           });
           setDebugStatus("Video uploaded");
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          showToast("Video uploaded successfully", "success");
         } catch (uploadErr) {
           const uploadMessage =
             uploadErr instanceof Error
               ? uploadErr.message
               : "Video upload failed. Please try again.";
           setDebugStatus(uploadMessage);
-          throw new Error(uploadMessage);
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+          showToast(uploadMessage, "error");
+          return;
         }
       }
     } catch (error) {
@@ -292,7 +302,7 @@ export function VideoRecorder({ onClose }: VideoRecorderProps) {
       </Pressable>
 
       <View pointerEvents="box-none" style={styles.bottomOverlay}>
-        <View
+        <Pressable
           accessible
           accessibilityLabel={
             isRecording ? "Stop video recording" : "Start video recording"
@@ -305,15 +315,11 @@ export function VideoRecorder({ onClose }: VideoRecorderProps) {
               void startRecording();
             }
           }}
-          onResponderGrant={() => {
+          onPressIn={() => {
             if (!isCameraReady || isUploading) return;
             void startRecording();
           }}
-          onResponderRelease={stopRecording}
-          onResponderTerminate={stopRecording}
-          onStartShouldSetResponder={() => !isUploading && isCameraReady}
-          onTouchCancel={stopRecording}
-          onTouchEnd={stopRecording}
+          onPressOut={stopRecording}
           style={[
             styles.recordButton,
             isRecording && styles.recordButtonActive,
@@ -327,7 +333,7 @@ export function VideoRecorder({ onClose }: VideoRecorderProps) {
               isRecording && styles.stopButtonCore,
             ]}
           />
-        </View>
+        </Pressable>
       </View>
     </View>
   );

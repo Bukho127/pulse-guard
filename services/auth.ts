@@ -25,6 +25,23 @@ function extractToken(data: unknown): string | null {
   return typeof candidate === "string" ? candidate : null;
 }
 
+async function getErrorMessage(res: Response, fallback: string) {
+  const payload = await res.json().catch(() => null);
+
+  if (!payload || typeof payload !== "object") {
+    return fallback;
+  }
+
+  const errorPayload = payload as Record<string, unknown>;
+  const message = errorPayload.message || errorPayload.error;
+
+  if (Array.isArray(message)) {
+    return message.filter(Boolean).join(", ") || fallback;
+  }
+
+  return typeof message === "string" && message.trim() ? message : fallback;
+}
+
 export async function loginRequest(email: string, password: string) {
   if (DEBUG_AUTH_BYPASS) {
     await AsyncStorage.setItem(TOKEN_KEY, DEBUG_AUTH_TOKEN);
@@ -42,8 +59,7 @@ export async function loginRequest(email: string, password: string) {
     });
 
     if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.message || "Login failed");
+      throw new Error(await getErrorMessage(res, "Login failed"));
     }
 
     const data = await res.json();
@@ -53,8 +69,7 @@ export async function loginRequest(email: string, password: string) {
     await AsyncStorage.setItem(TOKEN_KEY, token);
     return token;
   } catch (err: any) {
-    // Surface network errors with context
-    throw new Error(`Network request failed: ${err?.message || String(err)}`);
+    throw err instanceof Error ? err : new Error(String(err));
   }
 }
 
@@ -72,10 +87,7 @@ export async function googleIdTokenLoginRequest(idToken: string) {
     console.log("Google auth response status:", res.status);
 
     if (!res.ok) {
-      const rawText = await res.text();
-      console.log("Google auth failed - raw body:", rawText);
-      const err = JSON.parse(rawText || "{}");
-      throw new Error(err.message || "Google sign-in failed");
+      throw new Error(await getErrorMessage(res, "Google sign-in failed"));
     }
 
     const data = await res.json();
@@ -86,7 +98,7 @@ export async function googleIdTokenLoginRequest(idToken: string) {
     return token;
   } catch (err: any) {
     console.log("Google auth caught error:", err);
-    throw new Error(`Network request failed: ${err?.message || String(err)}`);
+    throw err instanceof Error ? err : new Error(String(err));
   }
 }
 
@@ -102,12 +114,11 @@ export async function registerRequest(
     const res = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, email, password }),
+      body: JSON.stringify({ full_name: name, name, email, password }),
     });
 
     if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.message || "Registration failed");
+      throw new Error(await getErrorMessage(res, "Registration failed"));
     }
 
     const data = await res.json();
@@ -119,7 +130,7 @@ export async function registerRequest(
 
     return null;
   } catch (err: any) {
-    throw new Error(`Network request failed: ${err?.message || String(err)}`);
+    throw err instanceof Error ? err : new Error(String(err));
   }
 }
 

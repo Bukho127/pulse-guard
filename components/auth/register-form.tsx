@@ -25,7 +25,7 @@ export function RegisterForm() {
     try {
       await register(name.trim(), email.trim(), password);
       router.replace("/(tabs)/home");
-    } catch (_) {
+    } catch {
       // error shown in context; keep on screen
     }
   };

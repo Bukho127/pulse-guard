@@ -18,13 +18,17 @@ type Props = PropsWithChildren<{
   headerBackgroundColor: { dark: string; light: string };
 }>;
 
+function getThemeName(theme: ReturnType<typeof useColorScheme>): keyof Props['headerBackgroundColor'] {
+  return theme === 'dark' ? 'dark' : 'light';
+}
+
 export default function ParallaxScrollView({
   children,
   headerImage,
   headerBackgroundColor,
 }: Props) {
   const backgroundColor = useThemeColor({}, 'background');
-  const colorScheme = useColorScheme() ?? 'light';
+  const colorScheme = getThemeName(useColorScheme());
   const scrollRef = useAnimatedRef<Animated.ScrollView>();
   const scrollOffset = useScrollOffset(scrollRef);
   const headerAnimatedStyle = useAnimatedStyle(() => {

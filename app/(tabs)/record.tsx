@@ -1,12 +1,20 @@
 import { VideoRecorder } from "@/components/record/video-recorder";
-import { useIsFocused } from "@react-navigation/native";
-import { useRouter } from "expo-router";
+import { useFocusEffect, useRouter } from "expo-router";
+import { useCallback, useState } from "react";
 import { StyleSheet } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 export default function RecordScreen() {
   const router = useRouter();
-  const isFocused = useIsFocused();
+  const [isFocused, setIsFocused] = useState(false);
+
+  useFocusEffect(
+    useCallback(() => {
+      setIsFocused(true);
+
+      return () => setIsFocused(false);
+    }, []),
+  );
 
   return (
     <SafeAreaView style={styles.safeArea}>

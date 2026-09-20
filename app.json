@@ -43,7 +43,13 @@
     },
     "plugins": [
       "expo-router",
-      "expo-notifications",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/icons/pulse-guard-notification.png",
+          "color": "#57B74A"
+        }
+      ],
       [
         "expo-location",
         {
@@ -67,29 +73,36 @@
       [
         "expo-splash-screen",
         {
-          "image": "./assets/images/splash-icon.png",
-          "imageWidth": 200,
+          "image": "./assets/icons/pulse-guard-notification.png",
+          "imageWidth": 120,
           "resizeMode": "contain",
           "backgroundColor": "#ffffff",
           "dark": {
-            "backgroundColor": "#000000"
+            "backgroundColor": "#ffffff"
           }
         }
       ],
       "expo-font",
       "expo-web-browser",
       "@react-native-google-signin/google-signin",
-      "expo-task-manager"
+      "expo-task-manager",
+      "expo-image",
+      "expo-status-bar"
     ],
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
     },
     "extra": {
+      "EXPO_PUBLIC_API_URL": "https://pulseguard-api.southafricanorth.cloudapp.azure.com",
       "router": {},
       "eas": {
         "projectId": "00cecbc1-d34d-479c-9537-bcb658774674"
       }
+    },
+    "notification": {
+      "icon": "./assets/icons/pulse-guard-notification.png",
+      "color": "#57B74A"
     },
     "owner": "bukho127"
   }

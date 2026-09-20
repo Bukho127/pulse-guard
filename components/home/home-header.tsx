@@ -1,18 +1,18 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useFocusEffect } from "@react-navigation/native";
 import * as Location from "expo-location";
-import { Href, useRouter } from "expo-router";
+import { Href, useFocusEffect, useRouter } from "expo-router";
 import {
   openBrowserAsync,
   WebBrowserPresentationStyle,
 } from "expo-web-browser";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Animated,
   Easing,
   Linking,
   Modal,
   Pressable,
+  ScrollView,
   StyleProp,
   StyleSheet,
   TextStyle,
@@ -113,7 +113,7 @@ export function HomeHeader() {
   const [userEmail, setUserEmail] = useState(FALLBACK_USER_EMAIL);
   const [isProfileDrawerOpen, setIsProfileDrawerOpen] = useState(false);
   const [isProfileDrawerVisible, setIsProfileDrawerVisible] = useState(false);
-  const drawerProgress = useRef(new Animated.Value(0)).current;
+  const drawerProgress = useMemo(() => new Animated.Value(0), []);
   const drawerWidth = Math.min(width * 0.82, 340);
 
   const loadLocation = useCallback(async () => {
@@ -139,7 +139,13 @@ export function HomeHeader() {
   }, []);
 
   useEffect(() => {
-    void loadLocation();
+    const timeoutId = setTimeout(() => {
+      void loadLocation();
+    }, 0);
+
+    return () => {
+      clearTimeout(timeoutId);
+    };
   }, [loadLocation]);
 
   useEffect(() => {
@@ -193,7 +199,13 @@ export function HomeHeader() {
   );
 
   useEffect(() => {
-    void loadUnreadNotificationCount();
+    const timeoutId = setTimeout(() => {
+      void loadUnreadNotificationCount();
+    }, 0);
+
+    return () => {
+      clearTimeout(timeoutId);
+    };
   }, [loadUnreadNotificationCount, notification]);
 
   useEffect(() => {
@@ -332,7 +344,6 @@ export function HomeHeader() {
               {
                 width: drawerWidth,
                 paddingTop: Math.max(insets.top, 18) + 14,
-                paddingBottom: Math.max(insets.bottom, 18),
                 transform: [
                   {
                     translateX: drawerProgress.interpolate({
@@ -369,96 +380,105 @@ export function HomeHeader() {
               </Pressable>
             </View>
 
-            <View style={styles.drawerLocation}>
-              <Ionicons name="location-outline" size={18} color="#57BE47" />
-              <ThemedText numberOfLines={2} style={styles.drawerLocationText}>
-                {locationLabel}
-              </ThemedText>
-            </View>
-
-            {/* these are the items in the drawer menu, each item has an icon,
-              label, helper text, and an onPress function that navigates to a
-              different screen or opens an external link */}
-
-            <ThemedText style={styles.drawerSectionLabel}>Account</ThemedText>
-            <View style={styles.drawerSection}>
-              <DrawerItem
-                icon="notifications-circle-outline"
-                label="Notification settings"
-                helper="Choose what alerts you receive"
-                onPress={() => navigateFromDrawer("/settings/notifications")}
-              />
-              <DrawerItem
-                icon="shield-outline"
-                label="Privacy & safety"
-                helper="Manage visibility and blocked users"
-                onPress={() => navigateFromDrawer("/settings/privacy")}
-              />
-            </View>
-
-            <ThemedText style={styles.drawerSectionLabel}>Support</ThemedText>
-            <View style={styles.drawerSection}>
-              <DrawerItem
-                icon="help-circle-outline"
-                label="Help center"
-                helper="FAQs and how-to guides"
-                onPress={() => navigateFromDrawer("/support/help")}
-              />
-              <DrawerItem
-                icon="flag-outline"
-                label="Report a problem"
-                helper="Tell us about a bug or issue"
-                onPress={() => navigateFromDrawer("/support/report")}
-              />
-            </View>
-
-            <ThemedText style={styles.drawerSectionLabel}>Legal</ThemedText>
-            <View style={styles.drawerSection}>
-              <DrawerItem
-                icon="document-text-outline"
-                label="Terms of service"
-                helper="Read app usage terms"
-                onPress={() => {
-                  void openExternalLinkFromDrawer(TERMS_OF_USE_URL);
-                }}
-              />
-              <DrawerItem
-                icon="shield-checkmark-outline"
-                label="Privacy policy"
-                helper="See how data is handled"
-                onPress={() => {
-                  void openExternalLinkFromDrawer(PRIVACY_POLICY_URL);
-                }}
-              />
-            </View>
-
-            <ThemedText style={styles.drawerSectionLabel}>
-              Account management
-            </ThemedText>
-            <View style={styles.drawerSection}>
-              <DrawerItem
-                icon="trash-outline"
-                label="Delete account"
-                helper="remove your account and data"
-                labelStyle={styles.drawerDangerLabel}
-                iconColor="#C4291C"
-                onPress={() => navigateFromDrawer("/settings/delete-account")}
-              />
-            </View>
-
-            <Pressable
-              accessibilityRole="button"
-              onPress={() => {
-                void handleLogout();
-              }}
-              style={({ pressed }) => [
-                styles.logoutButton,
-                pressed && styles.pressed,
+            <ScrollView
+              bounces={false}
+              contentContainerStyle={[
+                styles.drawerScrollContent,
+                { paddingBottom: Math.max(insets.bottom, 18) },
               ]}
+              showsVerticalScrollIndicator={false}
+              style={styles.drawerScroll}
             >
-              <Ionicons name="log-out-outline" size={19} color="#C4291C" />
-              <ThemedText style={styles.logoutText}>Sign out</ThemedText>
-            </Pressable>
+              <View style={styles.drawerLocation}>
+                <Ionicons name="location-outline" size={18} color="#57BE47" />
+                <ThemedText
+                  numberOfLines={2}
+                  style={styles.drawerLocationText}
+                >
+                  {locationLabel}
+                </ThemedText>
+              </View>
+
+              <ThemedText style={styles.drawerSectionLabel}>Account</ThemedText>
+              <View style={styles.drawerSection}>
+                <DrawerItem
+                  icon="notifications-circle-outline"
+                  label="Notification settings"
+                  helper="Choose what alerts you receive"
+                  onPress={() => navigateFromDrawer("/settings/notifications")}
+                />
+                <DrawerItem
+                  icon="shield-outline"
+                  label="Privacy & safety"
+                  helper="Manage visibility and blocked users"
+                  onPress={() => navigateFromDrawer("/settings/privacy")}
+                />
+              </View>
+
+              <ThemedText style={styles.drawerSectionLabel}>Support</ThemedText>
+              <View style={styles.drawerSection}>
+                <DrawerItem
+                  icon="help-circle-outline"
+                  label="Help center"
+                  helper="FAQs and how-to guides"
+                  onPress={() => navigateFromDrawer("/support/help")}
+                />
+                <DrawerItem
+                  icon="flag-outline"
+                  label="Report a problem"
+                  helper="Tell us about a bug or issue"
+                  onPress={() => navigateFromDrawer("/support/report")}
+                />
+              </View>
+
+              <ThemedText style={styles.drawerSectionLabel}>Legal</ThemedText>
+              <View style={styles.drawerSection}>
+                <DrawerItem
+                  icon="document-text-outline"
+                  label="Terms of service"
+                  helper="Read app usage terms"
+                  onPress={() => {
+                    void openExternalLinkFromDrawer(TERMS_OF_USE_URL);
+                  }}
+                />
+                <DrawerItem
+                  icon="shield-checkmark-outline"
+                  label="Privacy policy"
+                  helper="See how data is handled"
+                  onPress={() => {
+                    void openExternalLinkFromDrawer(PRIVACY_POLICY_URL);
+                  }}
+                />
+              </View>
+
+              <ThemedText style={styles.drawerSectionLabel}>
+                Account management
+              </ThemedText>
+              <View style={styles.drawerSection}>
+                <DrawerItem
+                  icon="trash-outline"
+                  label="Delete account"
+                  helper="remove your account and data"
+                  labelStyle={styles.drawerDangerLabel}
+                  iconColor="#C4291C"
+                  onPress={() => navigateFromDrawer("/settings/delete-account")}
+                />
+              </View>
+
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => {
+                  void handleLogout();
+                }}
+                style={({ pressed }) => [
+                  styles.logoutButton,
+                  pressed && styles.pressed,
+                ]}
+              >
+                <Ionicons name="log-out-outline" size={19} color="#C4291C" />
+                <ThemedText style={styles.logoutText}>Sign out</ThemedText>
+              </Pressable>
+            </ScrollView>
           </Animated.View>
         </View>
       </Modal>
@@ -567,6 +587,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 12,
   },
+  drawerScroll: {
+    flex: 1,
+  },
+  drawerScrollContent: {
+    flexGrow: 1,
+  },
   drawerAvatar: {
     width: 46,
     height: 46,
@@ -636,7 +662,6 @@ const styles = StyleSheet.create({
     fontFamily: "Geist_400Regular",
   },
   drawerSection: {
-    marginTop: 22,
     gap: 4,
   },
   drawerItem: {
@@ -680,7 +705,7 @@ const styles = StyleSheet.create({
   },
   logoutButton: {
     minHeight: 48,
-    marginTop: "auto",
+    marginTop: 22,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
