@@ -542,7 +542,7 @@ export default function HomeScreen() {
               <Ionicons
                 name="shield-checkmark-outline"
                 size={22}
-                color="#ffffff"
+                color="#53e333"
               />
             </View>
             <View style={styles.tipTextGroup}>
@@ -781,8 +781,8 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 12,
     backgroundColor: "#F7FAF6",
-    borderWidth: 1,
-    borderColor: "#57BE47",
+    borderWidth: 0.5,
+    borderColor: "#86e177",
   },
   tipIconShell: {
     width: 38,
