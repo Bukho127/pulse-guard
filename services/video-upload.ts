@@ -10,6 +10,7 @@ type VideoLocation = {
 
 type UploadRecordedVideoOptions = {
   location: VideoLocation;
+  onProgress?: (progress: number) => void;
 };
 
 type ReactNativeFormDataFile = {
@@ -53,6 +54,7 @@ function sendMultipartRequest(
   url: string,
   formData: FormData,
   token: string | null,
+  onProgress?: (progress: number) => void,
 ): Promise<void> {
   return new Promise((resolve, reject) => {
     const request = new XMLHttpRequest();
@@ -74,6 +76,11 @@ function sendMultipartRequest(
 
     request.ontimeout = () => {
       reject(new Error("Video upload timed out. Please try again."));
+    };
+
+    request.upload.onprogress = (event) => {
+      if (!event.lengthComputable || event.total <= 0) return;
+      onProgress?.(Math.min(event.loaded / event.total, 1));
     };
 
     request.open("POST", url);
@@ -111,5 +118,6 @@ export async function uploadRecordedVideo(
     `${API_BASE_URL}/incidents`,
     formData,
     await getToken(),
+    options.onProgress,
   );
 }

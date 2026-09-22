@@ -8,19 +8,29 @@ import {
   subscribeToMobileCrimeAnalyticsErrors,
   type LocalCrimePoint,
   type MobileCrimeAnalytics,
+  type MobileCrimeHotspot,
 } from "@/api";
 import type { HeatmapIncidentPoint } from "@/constants/heatmap-data";
 import { useAuth } from "@/context/AuthContext";
 import { requestLocationPermission } from "@/services/location";
 
 const MOBILE_ANALYTICS_REFRESH_MS = 2 * 60 * 60 * 1000;
+const DEBUG_HEATMAP = __DEV__;
 
-function getHeatmapPointId(point: LocalCrimePoint, index: number): string {
+function getLocalCrimePointId(point: LocalCrimePoint, index: number): string {
   const firstIncidentId = point.incidentIds[0];
 
   return firstIncidentId
     ? `local-crime-${firstIncidentId}`
     : `local-crime-${point.latitude}-${point.longitude}-${index}`;
+}
+
+function getHeatmapPointId(hotspot: MobileCrimeHotspot, index: number): string {
+  const incidentId = hotspot.incident_id;
+
+  return incidentId
+    ? `local-crime-${incidentId}`
+    : `local-crime-${hotspot.latitude}-${hotspot.longitude}-${index}`;
 }
 
 function toHeatmapIncidents(
@@ -30,12 +40,34 @@ function toHeatmapIncidents(
     return [];
   }
 
-  return analytics.localCrimePoints.map((point, index) => ({
-    id: getHeatmapPointId(point, index),
-    latitude: point.latitude,
-    longitude: point.longitude,
-    reportedCases: point.count,
-  }));
+  if (analytics.localCrimePoints?.length) {
+    return analytics.localCrimePoints
+      .map((point, index) => ({
+        id: getLocalCrimePointId(point, index),
+        latitude: Number(point.latitude),
+        longitude: Number(point.longitude),
+        reportedCases: Number(point.count),
+      }))
+      .filter(
+        (point) =>
+          Number.isFinite(point.latitude) &&
+          Number.isFinite(point.longitude) &&
+          Number.isFinite(point.reportedCases),
+      );
+  }
+
+  return (analytics.hotspots ?? [])
+    .map((hotspot, index) => ({
+      id: getHeatmapPointId(hotspot, index),
+      latitude: Number(hotspot.latitude),
+      longitude: Number(hotspot.longitude),
+      reportedCases: 1,
+    }))
+    .filter(
+      (hotspot) =>
+        Number.isFinite(hotspot.latitude) &&
+        Number.isFinite(hotspot.longitude),
+    );
 }
 
 export function useMobileCrimeAnalytics() {
@@ -72,8 +104,23 @@ export function useMobileCrimeAnalytics() {
           return;
         }
 
+        const incidents = toHeatmapIncidents(analytics);
+
+        if (DEBUG_HEATMAP) {
+          console.log("Mobile crime analytics received:", {
+            convertedIncidents: incidents.length,
+            firstConvertedIncident: incidents[0],
+            firstLocalCrimePoint: analytics.localCrimePoints?.[0],
+            firstHotspot: analytics.hotspots?.[0],
+            hotspots: analytics.hotspots?.length ?? 0,
+            localCrimePoints: analytics.localCrimePoints?.length ?? 0,
+            riskRank: analytics.riskRank,
+            totalIncidentCount: analytics.totalIncidentCount,
+          });
+        }
+
         setMobileAnalytics(analytics);
-        setHeatmapIncidents(toHeatmapIncidents(analytics));
+        setHeatmapIncidents(incidents);
         setHeatmapError(null);
         setIsLoadingHeatmap(false);
       }
@@ -89,6 +136,12 @@ export function useMobileCrimeAnalytics() {
           }
 
           if (result.status !== "granted") {
+            if (DEBUG_HEATMAP) {
+              console.log("Mobile heatmap location blocked:", {
+                message: "message" in result ? result.message : undefined,
+                status: result.status,
+              });
+            }
             setHeatmapError(
               result.status === "services_disabled"
                 ? "Turn on location services to load local crime data."
@@ -96,6 +149,13 @@ export function useMobileCrimeAnalytics() {
             );
             setIsLoadingHeatmap(false);
             return;
+          }
+
+          if (DEBUG_HEATMAP) {
+            console.log("Mobile crime analytics request:", {
+              latitude: result.location.coords.latitude,
+              longitude: result.location.coords.longitude,
+            });
           }
 
           const analytics = await requestMobileCrimeAnalytics(
@@ -127,12 +187,20 @@ export function useMobileCrimeAnalytics() {
         socket,
         (error) => {
           if (isActive) {
+            if (DEBUG_HEATMAP) {
+              console.error("Mobile heatmap analytics error:", error);
+            }
             setHeatmapError(error.message);
             setIsLoadingHeatmap(false);
           }
         },
       );
 
+      socket.on("connect_error", (error) => {
+        if (DEBUG_HEATMAP) {
+          console.error("Mobile heatmap socket connect error:", error.message);
+        }
+      });
       socket.on("connect", requestAnalyticsForCurrentLocation);
       socket.connect();
       refreshInterval = setInterval(
@@ -145,6 +213,7 @@ export function useMobileCrimeAnalytics() {
         if (refreshInterval) {
           clearInterval(refreshInterval);
         }
+        socket.off("connect_error");
         socket.off("connect", requestAnalyticsForCurrentLocation);
         unsubscribeAnalytics();
         unsubscribeErrors();

@@ -10,15 +10,22 @@ type VideoLocation = {
 };
 
 export function useVideoUpload() {
-  const { showToast } = useToast();
+  const { showToast, updateToastProgress } = useToast();
   const [isUploading, setIsUploading] = useState(false);
 
   const upload = useCallback(
     async (uri: string, location: VideoLocation) => {
       setIsUploading(true);
+      showToast("Sending video", "loading", {
+        autoHide: false,
+        progress: 0,
+      });
       try {
-        await uploadRecordedVideo(uri, { location });
-        showToast("Video uploaded successfully", "success");
+        await uploadRecordedVideo(uri, {
+          location,
+          onProgress: updateToastProgress,
+        });
+        showToast("Video delivered", "success", { confetti: true });
       } catch (err) {
         showToast(
           err instanceof Error
@@ -31,7 +38,7 @@ export function useVideoUpload() {
         setIsUploading(false);
       }
     },
-    [showToast],
+    [showToast, updateToastProgress],
   );
 
   return { upload, isUploading };

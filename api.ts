@@ -132,13 +132,24 @@ export interface LocalCrimeCellCount {
   count: number;
 }
 
+export interface MobileCrimeHotspot {
+  incident_id: string | number;
+  latitude: number | string;
+  longitude: number | string;
+  status?: string;
+  created_at?: string;
+  h3Index?: string;
+}
+
 export interface MobileCrimeAnalytics {
   type: "mobile-crime-analytics";
   h3Index: string;
   resolution: number;
+  searchRadius: number;
   searchedCells: string[];
   totalIncidentCount: number;
   riskRank: RiskRank;
+  hotspots: MobileCrimeHotspot[];
   localCrimePoints: LocalCrimePoint[];
   cellCounts: LocalCrimeCellCount[];
 }

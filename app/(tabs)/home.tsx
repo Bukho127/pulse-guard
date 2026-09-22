@@ -12,8 +12,8 @@ import {
   subscribeToMobileCrimeAnalytics,
   subscribeToMobileCrimeAnalyticsErrors,
   type Incident,
-  type LocalCrimePoint,
   type MobileCrimeAnalytics,
+  type MobileCrimeHotspot,
 } from "@/api";
 import { HomeHeader } from "@/components/home/home-header";
 import { ThemedText } from "@/components/themed-text";
@@ -115,12 +115,12 @@ function formatUploadedTime(incident: Incident | null): string | null {
   }).format(new Date(timestamp));
 }
 
-function getHeatmapPointId(point: LocalCrimePoint, index: number): string {
-  const firstIncidentId = point.incidentIds[0];
+function getHeatmapPointId(hotspot: MobileCrimeHotspot, index: number): string {
+  const incidentId = hotspot.incident_id;
 
-  return firstIncidentId
-    ? `local-crime-${firstIncidentId}`
-    : `local-crime-${point.latitude}-${point.longitude}-${index}`;
+  return incidentId
+    ? `local-crime-${incidentId}`
+    : `local-crime-${hotspot.latitude}-${hotspot.longitude}-${index}`;
 }
 
 function toHeatmapIncidents(
@@ -130,12 +130,17 @@ function toHeatmapIncidents(
     return [];
   }
 
-  return analytics.localCrimePoints.map((point, index) => ({
-    id: getHeatmapPointId(point, index),
-    latitude: point.latitude,
-    longitude: point.longitude,
-    reportedCases: point.count,
-  }));
+  return (analytics.hotspots ?? [])
+    .map((hotspot, index) => ({
+      id: getHeatmapPointId(hotspot, index),
+      latitude: Number(hotspot.latitude),
+      longitude: Number(hotspot.longitude),
+      reportedCases: 1,
+    }))
+    .filter(
+      (hotspot) =>
+        Number.isFinite(hotspot.latitude) && Number.isFinite(hotspot.longitude),
+    );
 }
 
 // Builds the list of hotspots to geofence, sorted nearest-first, since
@@ -145,19 +150,23 @@ function buildGeofenceHotspots(
   analytics: MobileCrimeAnalytics,
   userCoords: { latitude: number; longitude: number },
 ): GeofenceHotspot[] {
-  return analytics.localCrimePoints
-    .map((point, index) => ({
-      id: getHeatmapPointId(point, index),
-      latitude: point.latitude,
-      longitude: point.longitude,
-      reportedCases: point.count,
+  return (analytics.hotspots ?? [])
+    .map((hotspot, index) => ({
+      id: getHeatmapPointId(hotspot, index),
+      latitude: Number(hotspot.latitude),
+      longitude: Number(hotspot.longitude),
+      reportedCases: 1,
       distance: distanceMeters(
         userCoords.latitude,
         userCoords.longitude,
-        point.latitude,
-        point.longitude,
+        Number(hotspot.latitude),
+        Number(hotspot.longitude),
       ),
     }))
+    .filter(
+      (hotspot) =>
+        Number.isFinite(hotspot.latitude) && Number.isFinite(hotspot.longitude),
+    )
     .sort((a, b) => a.distance - b.distance)
     .map(({ distance, ...rest }) => rest);
 }

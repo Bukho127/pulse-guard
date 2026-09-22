@@ -16,6 +16,7 @@ import { requestLocationPermission } from '@/services/location';
 const MAPBOX_ACCESS_TOKEN =
   process.env.EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN ?? process.env.MAPBOX_ACCESS_TOKEN ?? '';
 const DEFAULT_CENTER: [number, number] = [18.4241, -33.9249];
+const DEBUG_HEATMAP = __DEV__;
 
 Mapbox.setAccessToken(MAPBOX_ACCESS_TOKEN);
 
@@ -57,6 +58,16 @@ export function HeatmapMap({
 
   const incidentShape = useMemo(() => toFeatureCollection(incidents), [incidents]);
   const hasIncidents = incidents.length > 0;
+
+  useEffect(() => {
+    if (DEBUG_HEATMAP) {
+      console.log('Native heatmap map received incidents:', {
+        count: incidents.length,
+        firstIncident: incidents[0],
+        hasMapboxToken: Boolean(MAPBOX_ACCESS_TOKEN),
+      });
+    }
+  }, [incidents]);
 
   useEffect(() => {
     const loadLocation = async () => {

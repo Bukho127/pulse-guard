@@ -17,6 +17,7 @@ const MAPBOX_ACCESS_TOKEN =
   process.env.MAPBOX_ACCESS_TOKEN ??
   "";
 const DEFAULT_CENTER: [number, number] = [18.4241, -33.9249];
+const DEBUG_HEATMAP = __DEV__;
 
 mapboxgl.accessToken = MAPBOX_ACCESS_TOKEN;
 
@@ -66,6 +67,16 @@ export function HeatmapMap({
     [incidents],
   );
   const hasIncidents = incidents.length > 0;
+
+  useEffect(() => {
+    if (DEBUG_HEATMAP) {
+      console.log("Web heatmap map received incidents:", {
+        count: incidents.length,
+        firstIncident: incidents[0],
+        hasMapboxToken: Boolean(MAPBOX_ACCESS_TOKEN),
+      });
+    }
+  }, [incidents]);
 
   useEffect(() => {
     const loadLocation = async () => {

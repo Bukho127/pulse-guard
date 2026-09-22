@@ -26,7 +26,7 @@ function formatDuration(seconds: number) {
 
 export function VideoRecorder({ onClose }: VideoRecorderProps) {
   const cameraRef = useRef<CameraView>(null);
-  const { showToast } = useToast();
+  const { showToast, updateToastProgress } = useToast();
   const isMountedRef = useRef(true);
   const isRecordingRef = useRef(false);
   const stopRequestedRef = useRef(false);
@@ -99,7 +99,6 @@ export function VideoRecorder({ onClose }: VideoRecorderProps) {
     setIsPressingRecord(true);
     setRecordingSeconds(0);
     setIsRecording(true);
-    setDebugStatus("Starting recording");
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
 
     try {
@@ -108,7 +107,6 @@ export function VideoRecorder({ onClose }: VideoRecorderProps) {
         maxDuration: MAX_RECORDING_SECONDS,
       });
       recordingPromiseRef.current = recordingPromise;
-      setDebugStatus("Recording active");
 
       // Give the native session ~300ms to open before honouring any stop request
       await new Promise((resolve) => setTimeout(resolve, 300));
@@ -139,7 +137,10 @@ export function VideoRecorder({ onClose }: VideoRecorderProps) {
           );
         }
 
-        setDebugStatus("Uploading video");
+        showToast("Sending video", "loading", {
+          autoHide: false,
+          progress: 0,
+        });
         try {
           await uploadRecordedVideo(video.uri, {
             location: {
@@ -148,10 +149,10 @@ export function VideoRecorder({ onClose }: VideoRecorderProps) {
               longitude: locationResult.location.coords.longitude,
               timestamp: locationResult.location.timestamp,
             },
+            onProgress: updateToastProgress,
           });
-          setDebugStatus("Video uploaded");
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-          showToast("Video uploaded successfully", "success");
+          showToast("Video delivered", "success", { confetti: true });
         } catch (uploadErr) {
           const uploadMessage =
             uploadErr instanceof Error
