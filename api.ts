@@ -4,6 +4,7 @@ import { io, type Socket } from "socket.io-client";
 
 const DEFAULT_API_PORT = "5001";
 const MOBILE_H3_RESOLUTION = 10;
+const MOBILE_ANALYTICS_ACK_TIMEOUT_MS = 10000;
 
 function normalizeApiBaseUrl(url: string): string {
   return url.replace(/\/+$/, "");
@@ -530,10 +531,23 @@ export function requestMobileCrimeAnalyticsByH3Index(
   h3Index: string,
 ): Promise<MobileCrimeAnalytics> {
   return new Promise((resolve, reject) => {
+    let isSettled = false;
+    const timeoutId = setTimeout(() => {
+      isSettled = true;
+      reject(new Error("Mobile crime analytics request timed out."));
+    }, MOBILE_ANALYTICS_ACK_TIMEOUT_MS);
+
     socket.emit(
       "mobile:crime-analytics:request",
       { h3Index },
       (response: MobileAnalyticsAck) => {
+        if (isSettled) {
+          return;
+        }
+
+        isSettled = true;
+        clearTimeout(timeoutId);
+
         if (!response?.success) {
           reject(
             new Error(

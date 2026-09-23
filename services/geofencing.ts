@@ -11,6 +11,9 @@ const MAX_GEOFENCED_HOTSPOTS = 20;
 
 const HOTSPOT_GEOFENCING_TASK = "pulse-guard-hotspot-geofencing";
 
+let geofencingPermissionPromise: Promise<boolean> | null = null;
+let activeRegionKey: string | null = null;
+
 export interface GeofenceHotspot {
   id: string;
   latitude: number;
@@ -48,13 +51,39 @@ TaskManager.defineTask(
 
 // Request the permission tier iOS geofencing requires
 export async function requestGeofencingPermission(): Promise<boolean> {
-  const foreground = await Location.requestForegroundPermissionsAsync();
-  if (foreground.status !== "granted") {
-    return false;
+  if (!geofencingPermissionPromise) {
+    geofencingPermissionPromise = (async () => {
+      const foreground = await Location.getForegroundPermissionsAsync();
+      const hasForegroundPermission =
+        foreground.status === "granted" ||
+        (await Location.requestForegroundPermissionsAsync()).status ===
+          "granted";
+
+      if (!hasForegroundPermission) {
+        return false;
+      }
+
+      const background = await Location.getBackgroundPermissionsAsync();
+      return (
+        background.status === "granted" ||
+        (await Location.requestBackgroundPermissionsAsync()).status ===
+          "granted"
+      );
+    })()
+      .then((hasPermission) => {
+        if (!hasPermission) {
+          geofencingPermissionPromise = null;
+        }
+
+        return hasPermission;
+      })
+      .catch((error) => {
+        geofencingPermissionPromise = null;
+        throw error;
+      });
   }
 
-  const background = await Location.requestBackgroundPermissionsAsync();
-  return background.status === "granted";
+  return geofencingPermissionPromise;
 }
 
 export async function startHotspotGeofencing(
@@ -76,6 +105,13 @@ export async function startHotspotGeofencing(
     return;
   }
 
+  const nextRegionKey = getRegionKey(nearestHotspots);
+  if (nextRegionKey === activeRegionKey) {
+    return;
+  }
+
+  activeRegionKey = nextRegionKey;
+
   const regions: Location.LocationRegion[] = nearestHotspots.map((spot) => ({
     identifier: spot.id,
     latitude: spot.latitude,
@@ -91,11 +127,14 @@ export async function startHotspotGeofencing(
     // change (e.g. on every analytics refresh).
     await Location.startGeofencingAsync(HOTSPOT_GEOFENCING_TASK, regions);
   } catch (err) {
+    activeRegionKey = null;
     console.error("[geofencing] Failed to start geofencing:", err);
   }
 }
 
 export async function stopHotspotGeofencing(): Promise<void> {
+  activeRegionKey = null;
+
   const isRegistered = await TaskManager.isTaskRegisteredAsync(
     HOTSPOT_GEOFENCING_TASK,
   );
@@ -103,4 +142,13 @@ export async function stopHotspotGeofencing(): Promise<void> {
   if (isRegistered) {
     await Location.stopGeofencingAsync(HOTSPOT_GEOFENCING_TASK);
   }
+}
+
+function getRegionKey(hotspots: GeofenceHotspot[]): string {
+  return hotspots
+    .map(
+      (spot) =>
+        `${spot.id}:${spot.latitude.toFixed(6)}:${spot.longitude.toFixed(6)}`,
+    )
+    .join("|");
 }

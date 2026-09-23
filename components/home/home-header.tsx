@@ -32,6 +32,7 @@ import { requestLocationPermission } from "@/services/location";
 const FALLBACK_LOCATION = "Fetching location...";
 const FALLBACK_USER_NAME = "Ratiloe Mbonani";
 const FALLBACK_USER_EMAIL = "Profile";
+const REVERSE_GEOCODE_TIMEOUT_MS = 6000;
 
 type DrawerItemProps = {
   icon: keyof typeof Ionicons.glyphMap;
@@ -127,10 +128,13 @@ export function HomeHeader() {
     }
 
     try {
-      const [place] = await Location.reverseGeocodeAsync({
-        latitude: result.location.coords.latitude,
-        longitude: result.location.coords.longitude,
-      });
+      const [place] = await withTimeout(
+        Location.reverseGeocodeAsync({
+          latitude: result.location.coords.latitude,
+          longitude: result.location.coords.longitude,
+        }),
+        REVERSE_GEOCODE_TIMEOUT_MS,
+      );
 
       setLocationLabel(formatLocation(place ? [place] : []));
     } catch {
@@ -484,6 +488,27 @@ export function HomeHeader() {
       </Modal>
     </View>
   );
+}
+
+async function withTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+): Promise<T> {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => {
+      reject(new Error("Request timed out."));
+    }, timeoutMs);
+  });
+
+  try {
+    return await Promise.race([promise, timeoutPromise]);
+  } finally {
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+    }
+  }
 }
 
 const styles = StyleSheet.create({
