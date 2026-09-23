@@ -102,13 +102,16 @@ export function VideoRecorder({ onClose }: VideoRecorderProps) {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
 
     try {
-      // maxDuration lets the SDK handle the time limit natively
+      // Start location fetch in parallel with recording — no need to wait
+      // until after the video finishes, since recording takes several
+      // seconds anyway.
+      const locationPromise = requestLocationPermission();
+
       const recordingPromise = cameraRef.current.recordAsync({
         maxDuration: MAX_RECORDING_SECONDS,
       });
       recordingPromiseRef.current = recordingPromise;
 
-      // Give the native session ~300ms to open before honouring any stop request
       await new Promise((resolve) => setTimeout(resolve, 300));
       if (stopRequestedRef.current) {
         cameraRef.current?.stopRecording();
@@ -127,10 +130,12 @@ export function VideoRecorder({ onClose }: VideoRecorderProps) {
       if (video?.uri && shouldUploadRecordingRef.current) {
         if (isMountedRef.current) {
           setIsUploading(true);
-          setDebugStatus("Getting location");
+          setDebugStatus("Preparing upload");
         }
 
-        const locationResult = await requestLocationPermission();
+        // By now, location has very likely already resolved, since it started
+        // when recording began.
+        const locationResult = await locationPromise;
         if (locationResult.status !== "granted") {
           throw new Error(
             "Unable to attach your current location to this video.",

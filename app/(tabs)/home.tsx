@@ -1,5 +1,6 @@
 import { useAuth } from "@/context/AuthContext";
 import { Ionicons } from "@expo/vector-icons";
+import * as Location from "expo-location";
 import { useFocusEffect, useRouter } from "expo-router";
 import { Fragment, useCallback, useMemo, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, View } from "react-native";
@@ -23,7 +24,7 @@ import {
   startHotspotGeofencing,
   stopHotspotGeofencing,
 } from "@/services/geofencing";
-import { requestLocationPermission } from "@/services/location";
+import { requestLocationPermission, watchLocation } from "@/services/location";
 import { HeatmapMap } from "../../components/maps/heatmap-map";
 
 const MOBILE_ANALYTICS_REFRESH_MS = 2 * 60 * 60 * 1000;
@@ -128,6 +129,22 @@ function toHeatmapIncidents(
 ): HeatmapIncidentPoint[] {
   if (!analytics) {
     return [];
+  }
+
+  if (analytics.localCrimePoints?.length) {
+    return analytics.localCrimePoints
+      .map((point, index) => ({
+        id: `local-crime-${point.latitude}-${point.longitude}-${index}`,
+        latitude: Number(point.latitude),
+        longitude: Number(point.longitude),
+        reportedCases: Number(point.count),
+      }))
+      .filter(
+        (point) =>
+          Number.isFinite(point.latitude) &&
+          Number.isFinite(point.longitude) &&
+          Number.isFinite(point.reportedCases),
+      );
   }
 
   return (analytics.hotspots ?? [])
@@ -301,7 +318,6 @@ export default function HomeScreen() {
   useFocusEffect(
     useCallback(() => {
       let isActive = true;
-      let refreshInterval: ReturnType<typeof setInterval> | null = null;
 
       if (!token) {
         setMobileAnalytics(null);
@@ -394,12 +410,51 @@ export default function HomeScreen() {
         },
       );
 
+      let locationSubscription: Location.LocationSubscription | null = null;
+      let refreshInterval: ReturnType<typeof setInterval> | null = null;
+
       socket.on("connect", requestAnalyticsForCurrentLocation);
       socket.connect();
       refreshInterval = setInterval(
         requestAnalyticsForCurrentLocation,
         MOBILE_ANALYTICS_REFRESH_MS,
       );
+
+      watchLocation(
+        (location) => {
+          if (!isActive) return;
+
+          requestMobileCrimeAnalytics(
+            socket,
+            location.coords.latitude,
+            location.coords.longitude,
+          )
+            .then((analytics) => {
+              applyAnalytics(analytics, {
+                latitude: location.coords.latitude,
+                longitude: location.coords.longitude,
+              });
+            })
+            .catch((error) => {
+              if (isActive) {
+                setHeatmapError(
+                  error instanceof Error
+                    ? error.message
+                    : "Couldn't refresh local crime data.",
+                );
+              }
+            });
+        },
+        (error) => {
+          console.error("[location] watch error:", error.message);
+        },
+      ).then((sub) => {
+        if (!isActive) {
+          sub?.remove();
+        } else {
+          locationSubscription = sub;
+        }
+      });
 
       return () => {
         isActive = false;
@@ -410,6 +465,7 @@ export default function HomeScreen() {
         unsubscribeAnalytics();
         unsubscribeErrors();
         socket.disconnect();
+        locationSubscription?.remove();
         void stopHotspotGeofencing();
       };
     }, [token]),
@@ -425,14 +481,18 @@ export default function HomeScreen() {
         };
       }
 
-      const counts = heatmapIncidents.map((incident) => incident.reportedCases);
+      const cellCounts = mobileAnalytics.cellCounts ?? [];
+      const highest =
+        cellCounts.length > 0
+          ? Math.max(...cellCounts.map((cell) => cell.count))
+          : 0;
 
       return {
         totalReportedIncidents: mobileAnalytics.totalIncidentCount,
-        highestReportedCases: counts.length > 0 ? Math.max(...counts) : 0,
+        highestReportedCases: highest,
         riskLabel: mobileAnalytics.riskRank,
       };
-    }, [heatmapIncidents, mobileAnalytics]);
+    }, [mobileAnalytics]);
 
   const reportProgressState = getReportProgressState(latestIncident);
   const isReportSent =
