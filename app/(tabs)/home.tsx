@@ -168,6 +168,7 @@ function buildGeofenceHotspots(
         Number.isFinite(hotspot.latitude) && Number.isFinite(hotspot.longitude),
     )
     .sort((a, b) => a.distance - b.distance)
+    .slice(0, 20) //cap at iOS's max monitored regions, ios has limit ceiling of 20
     .map(({ distance, ...rest }) => rest);
 }
 
@@ -214,7 +215,7 @@ function IncidentStatusStepper({
             >
               <Ionicons
                 name="checkmark-sharp"
-                size={17}
+                size={15}
                 color={step.state === "complete" ? "#57BE47" : "#B8B8B8"}
               />
             </View>
