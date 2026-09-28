@@ -158,21 +158,6 @@ pulse-guard-worker-golang/     # Go media worker
 
 ---
 
-**Backend (`.env`)**
-
-```
-PORT=5001
-JWT_SECRET=
-DB_HOST=
-DB_NAME=
-DB_USER=
-DB_PASSWORD=
-GOOGLE_WEB_CLIENT_ID=
-GO_SERVICE_URL=http://go-worker:5002
-MOBILE_H3_RESOLUTION=10
-MOBILE_MODERATE_RISK_MIN=5
-MOBILE_CRITICAL_RISK_MIN=15
-```
 
 **Mobile (`.env`)**
 
